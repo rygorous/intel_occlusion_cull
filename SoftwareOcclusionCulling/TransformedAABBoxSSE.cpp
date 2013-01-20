@@ -210,7 +210,6 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 	__m128i colOffset = _mm_setr_epi32(0, 1, 0, 1);
 	__m128i rowOffset = _mm_setr_epi32(0, 0, 1, 1);
 
-	__m128i fxptZero = _mm_setzero_si128();
 	float* pDepthBuffer = (float*)pRenderTargetPixels; 
 	
 	// Rasterize the AABB triangles 4 at a time
@@ -361,10 +360,10 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 												gama  = _mm_add_epi32(gama, aa2Inc))
 				{
 					//Test Pixel inside triangle
-					__m128i mask = _mm_cmplt_epi32(fxptZero, _mm_or_si128(_mm_or_si128(alpha, beta), gama));
+					__m128i mask = _mm_or_si128(_mm_or_si128(alpha, beta), gama);
 					
 					// Early out if all of this quad's pixels are outside the triangle.
-					if(_mm_test_all_zeros(mask, mask))
+					if(_mm_testc_si128(mask, _mm_set1_epi32(0x80000000)))
 					{
 						continue;
 					}
@@ -377,7 +376,7 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 					__m128 previousDepthValue = *(__m128*)&pDepthBuffer[idx];
 
 					__m128 depthMask  = _mm_cmpge_ps( depth, previousDepthValue);
-					__m128i finalMask = _mm_and_si128( mask, _mm_castps_si128(depthMask));
+					__m128i finalMask = _mm_andnot_si128( mask, _mm_castps_si128(depthMask));
 					if(!_mm_test_all_zeros(finalMask, finalMask))
 					{
 						*mVisible = true;
