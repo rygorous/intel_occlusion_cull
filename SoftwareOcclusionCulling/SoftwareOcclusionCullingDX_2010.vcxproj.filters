@@ -1,0 +1,260 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Media">
+      <UniqueIdentifier>{2f771209-07bf-49c7-947e-5838a4685133}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Media\Material">
+      <UniqueIdentifier>{230132e6-959f-4c31-af52-f71ada1cdd87}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Media\Shader">
+      <UniqueIdentifier>{4215aaa4-05fd-46f3-ad61-12bd2402e1b9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Media\Teapot">
+      <UniqueIdentifier>{b8317800-49ce-4e6e-8e86-6c756f949a50}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Media\Teapot\Asset">
+      <UniqueIdentifier>{0a2d11f3-81e4-4894-bb8b-d08a51105631}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Media\Teapot\Material">
+      <UniqueIdentifier>{d5fae338-a782-4b8a-88d9-7104b28e41ec}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Media\Teapot\Shader">
+      <UniqueIdentifier>{36e23a2f-4c2c-42d1-bd94-e7ec186a8fb0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Media\AssetSets">
+      <UniqueIdentifier>{4e6d9113-313e-4bca-abe0-c48858172fcf}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ReadMe.txt" />
+    <None Include="Media\Material\sprite.mtl">
+      <Filter>Media\Material</Filter>
+    </None>
+    <None Include="Media\Material\shadowCast.mtl">
+      <Filter>Media\Material</Filter>
+    </None>
+    <None Include="Media\Shader\sprite.rs">
+      <Filter>Media\Shader</Filter>
+    </None>
+    <None Include="Media\Shader\shadowCast.fx">
+      <Filter>Media\Shader</Filter>
+    </None>
+    <None Include="Media\Shader\shadowCast.rs">
+      <Filter>Media\Shader</Filter>
+    </None>
+    <None Include="Media\Shader\Sprite.fx">
+      <Filter>Media\Shader</Filter>
+    </None>
+    <None Include="Media\Teapot\Asset\teapot.set">
+      <Filter>Media\Teapot\Asset</Filter>
+    </None>
+    <None Include="Media\Teapot\Material\teapot_lambert.mtl">
+      <Filter>Media\Teapot\Material</Filter>
+    </None>
+    <None Include="SoftwareOcclusionCullingDX.ico">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="Media\Castle\Asset\stoneWalls.set">
+      <Filter>Media\AssetSets</Filter>
+    </None>
+    <None Include="Media\Castle\Asset\marketStalls.set">
+      <Filter>Media\AssetSets</Filter>
+    </None>
+    <None Include="Media\Castle\Asset\marketProps.set">
+      <Filter>Media\AssetSets</Filter>
+    </None>
+    <None Include="Media\Castle\Asset\ground.set">
+      <Filter>Media\AssetSets</Filter>
+    </None>
+    <None Include="Media\Castle\Asset\castle.set">
+      <Filter>Media\AssetSets</Filter>
+    </None>
+    <None Include="Media\Castle\Asset\castleDebug.set">
+      <Filter>Media\AssetSets</Filter>
+    </None>
+    <None Include="Media\Castle\Asset\groundDebug.set">
+      <Filter>Media\AssetSets</Filter>
+    </None>
+    <None Include="Media\Castle\Asset\marketPropsDebug.set">
+      <Filter>Media\AssetSets</Filter>
+    </None>
+    <None Include="Media\Castle\Asset\marketStallsDebug.set">
+      <Filter>Media\AssetSets</Filter>
+    </None>
+    <None Include="Media\Castle\Asset\stoneWallsDebug.set">
+      <Filter>Media\AssetSets</Filter>
+    </None>
+    <None Include="Media\Castle\Material\BoundingBox.mtl">
+      <Filter>Media\Material</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Constants.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DepthBufferRasterizer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DepthBufferRasterizerScalar.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DepthBufferRasterizerScalarMT.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DepthBufferRasterizerScalarST.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TransformedMeshScalar.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TransformedModelScalar.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AABBoxRasterizer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AABBoxRasterizerScalar.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AABBoxRasterizerScalarMT.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AABBoxRasterizerScalarST.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TransformedAABBoxScalar.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DepthBufferRasterizerSSE.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DepthBufferRasterizerSSEMT.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DepthBufferRasterizerSSEST.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TransformedMeshSSE.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TransformedModelSSE.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AABBoxRasterizerSSE.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AABBoxRasterizerSSEMT.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AABBoxRasterizerSSEST.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TransformedAABBoxSSE.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SoftwareOcclusionCulling.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HelperSSE.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HelperScalar.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DepthBufferRasterizer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DepthBufferRasterizerScalar.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DepthBufferRasterizerScalarMT.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DepthBufferRasterizerScalarST.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TransformedMeshScalar.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TransformedModelScalar.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AABBoxRasterizer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AABBoxRasterizerScalar.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AABBoxRasterizerScalarMT.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AABBoxRasterizerScalarST.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TransformedAABBoxScalar.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DepthBufferRasterizerSSE.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DepthBufferRasterizerSSEMT.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DepthBufferRasterizerSSEST.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TransformedMeshSSE.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TransformedModelSSE.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AABBoxRasterizerSSE.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AABBoxRasterizerSSEMT.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AABBoxRasterizerSSEST.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TransformedAABBoxSSE.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SoftwareOcclusionCulling.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HelperSSE.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HelperScalar.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="SoftwareOcclusionCullingDX_2010.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+</Project>
