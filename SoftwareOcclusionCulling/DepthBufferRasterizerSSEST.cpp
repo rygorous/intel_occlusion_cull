@@ -225,6 +225,12 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
 
 		__m128 oneOverTriArea = _mm_div_ps(_mm_set1_ps(1.0f), _mm_cvtepi32_ps(triArea));
 
+		// Z setup
+		__m128 Z[3];
+		Z[0] = xformedvPos[0].Z;
+		Z[1] = _mm_mul_ps(_mm_sub_ps(xformedvPos[1].Z, xformedvPos[0].Z), oneOverTriArea);
+		Z[2] = _mm_mul_ps(_mm_sub_ps(xformedvPos[2].Z, xformedvPos[0].Z), oneOverTriArea);
+
 		// Use bounding box traversal strategy to determine which pixels to rasterize 
 		__m128i startX = _mm_and_si128(Max(Min(Min(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(tileStartX)), _mm_set1_epi32(0xFFFFFFFE));
 		__m128i endX   = Min(_mm_add_epi32(Max(Max(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(1)), _mm_set1_epi32(tileEndX));
@@ -236,18 +242,12 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
         for(int lane=0; lane < numSimdTris; lane++)
         {
 			// Extract this triangle's properties from the SIMD versions
-            __m128 zz[3], oneOverW[3];
+            __m128 zz[3];
 			for(int vv = 0; vv < 3; vv++)
 			{
-				zz[vv] = _mm_set1_ps(xformedvPos[vv].Z.m128_f32[lane]);
-				oneOverW[vv] = _mm_set1_ps(xformedvPos[vv].W.m128_f32[lane]);
+				zz[vv] = _mm_set1_ps(Z[vv].m128_f32[lane]);
 			}
 
-			__m128 oneOverTotalArea = _mm_set1_ps(oneOverTriArea.m128_f32[lane]);
-			zz[0] *= oneOverTotalArea;
-			zz[1] *= oneOverTotalArea;
-			zz[2] *= oneOverTotalArea;
-			
 			int startXx = startX.m128i_i32[lane];
 			int endXx	= endX.m128i_i32[lane];
 			int startYy = startY.m128i_i32[lane];
@@ -319,7 +319,7 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
 					}
 					
 					// Compute barycentric-interpolated depth
-			        __m128 depth = _mm_mul_ps(_mm_cvtepi32_ps(alpha), zz[0]);
+			        __m128 depth = zz[0];
 					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), zz[1]));
 					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), zz[2]));
 					
