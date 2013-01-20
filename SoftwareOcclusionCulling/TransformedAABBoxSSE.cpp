@@ -324,6 +324,7 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 			// Tranverse pixels in 2x2 blocks and store 2x2 pixel quad depths contiguously in memory ==> 2*X
 			// This method provides better perfromance
 			int rowIdx = (startYy * SCREENW + 2 * startXx);
+			int rowSamples = (endXx - startXx) * 2;
 
 			col = _mm_add_epi32(colOffset, _mm_set1_epi32(startXx));
 			__m128i aa0Col = _mm_mullo_epi32(aa0, col);
@@ -348,16 +349,16 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 											bb2Row = _mm_add_epi32(bb2Row, bb2Inc))
 			{
 				// Compute barycentric coordinates 
-				int idx = rowIdx;
+				float *pDepthStart = &pDepthBuffer[rowIdx];
+				float *pDepthEnd = pDepthStart + rowSamples;
 				__m128i alpha = _mm_add_epi32(aa0Col, bb0Row);
 				__m128i beta = _mm_add_epi32(aa1Col, bb1Row);
 				__m128i gama = _mm_add_epi32(aa2Col, bb2Row);
 
-				for(int c = startXx; c < endXx; c += 2,
-												idx += 4,
-												alpha = _mm_add_epi32(alpha, aa0Inc),
-												beta  = _mm_add_epi32(beta, aa1Inc),
-												gama  = _mm_add_epi32(gama, aa2Inc))
+				for(float *pDepth = pDepthStart; pDepth < pDepthEnd; pDepth += 4,
+						alpha = _mm_add_epi32(alpha, aa0Inc),
+						beta  = _mm_add_epi32(beta, aa1Inc),
+						gama  = _mm_add_epi32(gama, aa2Inc))
 				{
 					//Test Pixel inside triangle
 					__m128i mask = _mm_or_si128(_mm_or_si128(alpha, beta), gama);
@@ -373,7 +374,7 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), zz[1]));
 					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), zz[2]));
 
-					__m128 previousDepthValue = *(__m128*)&pDepthBuffer[idx];
+					__m128 previousDepthValue = *(__m128*)pDepth;
 
 					__m128 depthMask  = _mm_cmpge_ps( depth, previousDepthValue);
 					__m128i finalMask = _mm_andnot_si128( mask, _mm_castps_si128(depthMask));
