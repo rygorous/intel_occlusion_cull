@@ -212,6 +212,179 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(VOID* tas
 	sample->RasterizeBinnedTrianglesToDepthBuffer(taskId, taskCount);
 }
 
+static const int BlockLog2 = 2;
+static const int BlockSize = 1 << BlockLog2;
+
+struct FourEdges
+{
+	__m128i stepX;
+	__m128i stepY;
+	__m128i stepQuad;
+	__m128i stepLine;
+	__m128i offs;
+	__m128i nmin;
+	__m128i nmax;
+
+	__forceinline void setup(const __m128i &x0, const __m128i &y0, const __m128i &x1, const __m128i &y1, const __m128i &minX, const __m128i &minY)
+	{
+		stepX = _mm_sub_epi32(y0, y1);
+		stepY = _mm_sub_epi32(x1, x0);
+		stepQuad = _mm_slli_epi32(stepX, 1);
+		stepLine = _mm_sub_epi32(_mm_slli_epi32(stepY, 1), _mm_slli_epi32(stepX, BlockLog2));
+
+		// offset
+		offs = _mm_add_epi32(_mm_mullo_epi32(_mm_sub_epi32(minX, x0), stepX), _mm_mullo_epi32(_mm_sub_epi32(minY, y0), stepY));
+
+		// min/max corners
+		__m128i zero = _mm_setzero_si128();
+		nmin = _mm_add_epi32(_mm_min_epi32(stepX, zero), _mm_min_epi32(stepY, zero));
+		nmax = _mm_add_epi32(_mm_max_epi32(stepX, zero), _mm_max_epi32(stepY, zero));
+
+		nmin = _mm_mullo_epi32(nmin, _mm_set1_epi32(1 - BlockSize));
+		nmax = _mm_mullo_epi32(nmax, _mm_set1_epi32(1 - BlockSize));
+	}
+};
+
+struct StepEdge
+{
+	__m128i offs, quad, line, stepY;
+};
+
+struct BlockSetup
+{
+	StepEdge e[3];
+	__m128 z[3];
+
+	__forceinline void setup(const FourEdges edge[], const __m128 Z[], int lane)
+	{
+		__m128i colOffs = _mm_setr_epi32(0, 1, 0, 1);
+		__m128i rowOffs = _mm_setr_epi32(0, 0, 1, 1);
+
+		for (int i=0; i < 3; i++)
+		{
+			__m128i stepX = _mm_set1_epi32(edge[i].stepX.m128i_i32[lane]);
+			__m128i stepY = _mm_set1_epi32(edge[i].stepY.m128i_i32[lane]);
+			e[i].offs = _mm_add_epi32(_mm_mullo_epi32(colOffs, stepX), _mm_mullo_epi32(rowOffs, stepY));
+			e[i].quad = _mm_set1_epi32(edge[i].stepQuad.m128i_i32[lane]);
+			e[i].line = _mm_set1_epi32(edge[i].stepLine.m128i_i32[lane]);
+			e[i].stepY = _mm_slli_epi32(stepY, 1);
+		}
+
+		z[0] = _mm_set1_ps(Z[0].m128_f32[lane]);
+		z[1] = _mm_set1_ps(Z[1].m128_f32[lane]);
+		z[2] = _mm_set1_ps(Z[2].m128_f32[lane]);
+	}
+};
+
+static __forceinline void DirectTri(float *pDepthRow, int e0, int e1, int e2, BlockSetup &setup, int w, int h)
+{
+	__m128i alphRow = _mm_add_epi32(_mm_set1_epi32(e0), setup.e[0].offs);
+	__m128i betaRow = _mm_add_epi32(_mm_set1_epi32(e1), setup.e[1].offs);
+	__m128i gamaRow = _mm_add_epi32(_mm_set1_epi32(e2), setup.e[2].offs);
+
+	for (int y=0; y < h; y += 2, pDepthRow += 2*SCREENW)
+	{
+		float *pDepth = pDepthRow;
+
+		__m128i alph = alphRow;
+		__m128i beta = betaRow;
+		__m128i gama = gamaRow;
+
+		for (int x=0; x < w; x += 2, pDepth += 4)
+		{
+			// Test pixel inside triangle
+			__m128i mask = _mm_or_si128(_mm_or_si128(alph, beta), gama);
+			alph = _mm_add_epi32(alph, setup.e[0].quad);
+			beta = _mm_add_epi32(beta, setup.e[1].quad);
+			gama = _mm_add_epi32(gama, setup.e[2].quad);
+
+			// Early out if all of this quad's pixels are outside the triangle
+			if(_mm_testc_si128(mask, _mm_set1_epi32(0x80000000)))
+				continue;
+
+			// Compute barycentric-interpolated depth
+			__m128 depth = setup.z[0];
+			depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), setup.z[1]));
+			depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), setup.z[2]));
+
+			__m128 prevDepth = _mm_load_ps(pDepth);
+			__m128 depthMask = _mm_cmpge_ps(depth, prevDepth);
+			__m128 finalMask = _mm_andnot_ps(_mm_castsi128_ps(mask), depthMask);
+			depth = _mm_blendv_ps(prevDepth, depth, finalMask);
+			_mm_store_ps(pDepth, depth);
+		}
+
+		alphRow = _mm_add_epi32(alphRow, setup.e[0].stepY);
+		betaRow = _mm_add_epi32(betaRow, setup.e[1].stepY);
+		gamaRow = _mm_add_epi32(gamaRow, setup.e[2].stepY);
+	}
+}
+
+static __forceinline void PartialBlock(float *pDepth, int e0, int e1, int e2, BlockSetup &setup)
+{
+	__m128i alph = _mm_add_epi32(_mm_set1_epi32(e0), setup.e[0].offs);
+	__m128i beta = _mm_add_epi32(_mm_set1_epi32(e1), setup.e[1].offs);
+	__m128i gama = _mm_add_epi32(_mm_set1_epi32(e2), setup.e[2].offs);
+
+	for (int y=0; y < BlockSize; y += 2, pDepth += 2*SCREENW - 2*BlockSize)
+	{
+		for (int x=0; x < BlockSize; x += 2, pDepth += 4)
+		{
+			// Test pixel inside triangle
+			__m128i mask = _mm_or_si128(_mm_or_si128(alph, beta), gama);
+			alph = _mm_add_epi32(alph, setup.e[0].quad);
+			beta = _mm_add_epi32(beta, setup.e[1].quad);
+			gama = _mm_add_epi32(gama, setup.e[2].quad);
+
+			// Early out if all of this quad's pixels are outside the triangle
+			if(_mm_testc_si128(mask, _mm_set1_epi32(0x80000000)))
+				continue;
+
+			// Compute barycentric-interpolated depth
+			__m128 depth = setup.z[0];
+			depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), setup.z[1]));
+			depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), setup.z[2]));
+
+			__m128 prevDepth = _mm_load_ps(pDepth);
+			__m128 depthMask = _mm_cmpge_ps(depth, prevDepth);
+			__m128 finalMask = _mm_andnot_ps(_mm_castsi128_ps(mask), depthMask);
+			depth = _mm_blendv_ps(prevDepth, depth, finalMask);
+			_mm_store_ps(pDepth, depth);
+		}
+
+		alph = _mm_add_epi32(alph, setup.e[0].line);
+		beta = _mm_add_epi32(beta, setup.e[1].line);
+		gama = _mm_add_epi32(gama, setup.e[2].line);
+	}
+}
+
+static __forceinline void SolidBlock(float *pDepth, int e0, int e1, int e2, BlockSetup &setup)
+{
+	__m128i beta = _mm_add_epi32(_mm_set1_epi32(e1), setup.e[1].offs);
+	__m128i gama = _mm_add_epi32(_mm_set1_epi32(e2), setup.e[2].offs);
+
+	for (int y=0; y < BlockSize; y += 2, pDepth += 2*SCREENW - 2*BlockSize)
+	{
+		for (int x=0; x < BlockSize; x += 2, pDepth += 4)
+		{
+			beta = _mm_add_epi32(beta, setup.e[1].quad);
+			gama = _mm_add_epi32(gama, setup.e[2].quad);
+
+			// Compute barycentric-interpolated depth
+			__m128 depth = setup.z[0];
+			depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), setup.z[1]));
+			depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), setup.z[2]));
+
+			__m128 prevDepth = _mm_load_ps(pDepth);
+			depth = _mm_max_ps(prevDepth, depth);
+			_mm_store_ps(pDepth, depth);
+		}
+
+		beta = _mm_add_epi32(beta, setup.e[1].line);
+		gama = _mm_add_epi32(gama, setup.e[2].line);
+	}
+}
+
 //-------------------------------------------------------------------------------
 // For each tile go through all the bins and process all the triangles in it.
 // Rasterize each triangle to the CPU depth buffer. 
@@ -222,9 +395,6 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 	// Denormal are zero (DAZ) is bit 6 and Flush to zero (FZ) is bit 15. 
 	// so to enable the two to have to set bits 6 and 15 which 1000 0000 0100 0000 = 0x8040
 	_mm_setcsr( _mm_getcsr() | 0x8040 );
-
-	__m128i colOffset = _mm_setr_epi32(0, 1, 0, 1);
-	__m128i rowOffset = _mm_setr_epi32(0, 0, 1, 1);
 
 	float* pDepthBuffer = (float*)mpRenderTargetPixels; 
 
@@ -319,117 +489,145 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			Z[i]    = z;
 		}
 
-		// Fab(x, y) =     Ax       +       By     +      C              = 0
-		// Fab(x, y) = (ya - yb)x   +   (xb - xa)y + (xa * yb - xb * ya) = 0
-		// Compute A = (ya - yb) for 2 of the 3 line segments that make up each triangle
-		__m128i A1 = _mm_sub_epi32(fixY[2], fixY[0]);
-		__m128i A2 = _mm_sub_epi32(fixY[0], fixY[1]);
+		// Bounding rectangle
+		__m128i minX = Max(Min(Min(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileStartX));
+		__m128i minY = Max(Min(Min(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(tileStartY));
+		__m128i maxX = Min(Max(Max(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileEndX - 1));
+		__m128i maxY = Min(Max(Max(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(tileEndY - 1));
 
-		// Compute B = (xb - xa) for 2 of the 3 line segments that make up each triangle
-		__m128i B1 = _mm_sub_epi32(fixX[0], fixX[2]);
-		__m128i B2 = _mm_sub_epi32(fixX[1], fixX[0]);
+		// Start in corner of block
+		__m128i minXSnap = _mm_and_si128(minX, _mm_set1_epi32(~(BlockSize - 1)));
+		__m128i minYSnap = _mm_and_si128(minY, _mm_set1_epi32(~(BlockSize - 1)));
+		minX = _mm_and_si128(minX, _mm_set1_epi32(~1));
+		minY = _mm_and_si128(minY, _mm_set1_epi32(~1));
 
-		// Compute C = (xa * yb - xb * ya) for 2 of the 3 line segments that make up each triangle
-		__m128i C1 = _mm_sub_epi32(_mm_mullo_epi32(fixX[2], fixY[0]), _mm_mullo_epi32(fixX[0], fixY[2]));
-		__m128i C2 = _mm_sub_epi32(_mm_mullo_epi32(fixX[0], fixY[1]), _mm_mullo_epi32(fixX[1], fixY[0]));
+		// Edges
+		FourEdges e[3];
+		e[0].setup(fixX[1], fixY[1], fixX[2], fixY[2], minXSnap, minYSnap);
+		e[1].setup(fixX[2], fixY[2], fixX[0], fixY[0], minXSnap, minYSnap);
+		e[2].setup(fixX[0], fixY[0], fixX[1], fixY[1], minXSnap, minYSnap);
 
 		// Compute triangle area
-		__m128i triArea = _mm_sub_epi32(_mm_mullo_epi32(B2, A1), _mm_mullo_epi32(B1, A2));
+		__m128i triArea = _mm_add_epi32(_mm_add_epi32(e[0].offs, e[1].offs), e[2].offs);
 		__m128 oneOverTriArea = _mm_div_ps(_mm_set1_ps(1.0f), _mm_cvtepi32_ps(triArea));
 
 		// Z setup
 		Z[1] = _mm_mul_ps(_mm_sub_ps(Z[1], Z[0]), oneOverTriArea);
 		Z[2] = _mm_mul_ps(_mm_sub_ps(Z[2], Z[0]), oneOverTriArea);
 
-		// Use bounding box traversal strategy to determine which pixels to rasterize 
-		__m128i startX = _mm_and_si128(Max(Min(Min(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileStartX)), _mm_set1_epi32(0xFFFFFFFE));
-		__m128i endX   = Min(Max(Max(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileEndX));
-
-		__m128i startY = _mm_and_si128(Max(Min(Min(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(tileStartY)), _mm_set1_epi32(0xFFFFFFFE));
-		__m128i endY   = Min(Max(Max(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(tileEndY));
+		// When we interpolate, beta and gama have already been advanced
+		// by one block, so compensate here.
+		Z[0] = _mm_sub_ps(Z[0], _mm_mul_ps(_mm_cvtepi32_ps(e[1].stepQuad), Z[1]));
+		Z[0] = _mm_sub_ps(Z[0], _mm_mul_ps(_mm_cvtepi32_ps(e[2].stepQuad), Z[2]));
 
         // Now we have 4 triangles set up.  Rasterize them each individually.
         for(int lane=0; lane < numSimdTris; lane++)
         {
 			// Extract this triangle's properties from the SIMD versions
-            __m128 zz[3];
-			for(int vv = 0; vv < 3; vv++)
-			{
-				zz[vv] = _mm_set1_ps(Z[vv].m128_f32[lane]);
-			}
+			int lx0 = minX.m128i_i32[lane];
+			int ly0 = minY.m128i_i32[lane];
+			int lx1 = maxX.m128i_i32[lane];
+			int ly1 = maxY.m128i_i32[lane];
 
-			int startXx = startX.m128i_i32[lane];
-			int endXx	= endX.m128i_i32[lane];
-			int startYy = startY.m128i_i32[lane];
-			int endYy	= endY.m128i_i32[lane];
-		
-			 // Incrementally compute Fab(x, y) for all the pixels inside the bounding box formed by (startX, endX) and (startY, endY) 
-			__m128i sum = _mm_set1_epi32(triArea.m128i_i32[lane]);
 
-			__m128i aa1 = _mm_set1_epi32(A1.m128i_i32[lane]);
-			__m128i aa2 = _mm_set1_epi32(A2.m128i_i32[lane]);
-
-			__m128i bb1 = _mm_set1_epi32(B1.m128i_i32[lane]);
-			__m128i bb2 = _mm_set1_epi32(B2.m128i_i32[lane]);
-
-			__m128i cc1 = _mm_set1_epi32(C1.m128i_i32[lane]);
-			__m128i cc2 = _mm_set1_epi32(C2.m128i_i32[lane]);
-
-			__m128i aa1Inc = _mm_slli_epi32(aa1, 1);
-			__m128i aa2Inc = _mm_slli_epi32(aa2, 1);
+			if (lx1 < lx0 || ly1 < ly0) // Can happen when tris are pessimistically binned
+				continue;
 			__m128i aa0Dec = _mm_add_epi32(aa1Inc, aa2Inc);
+			BlockSetup block;
+			block.setup(e, Z, lane);
 
-			__m128i row, col;
-
-			// Traverse pixels in 2x2 blocks and store 2x2 pixel quad depths contiguously in memory ==> 2*X
-			// This method provides better perfromance
-			UINT ofs_x0 = EncodePosX(startXx);
-			UINT ofs_x1 = EncodePosX(endXx);
-			UINT ofs_y0 = EncodePosY(startYy);
-			UINT ofs_y1 = EncodePosY(endYy);
-
-			col = _mm_add_epi32(colOffset, _mm_set1_epi32(startXx));
-			__m128i aa1Col = _mm_mullo_epi32(aa1, col);
-			__m128i aa2Col = _mm_mullo_epi32(aa2, col);
-
-			row = _mm_add_epi32(rowOffset, _mm_set1_epi32(startYy));
-			__m128i bb1Row = _mm_add_epi32(_mm_mullo_epi32(bb1, row), cc1);
-			__m128i bb2Row = _mm_add_epi32(_mm_mullo_epi32(bb2, row), cc2);
-
-			__m128i bb1Inc = _mm_slli_epi32(bb1, 1);
-			__m128i bb2Inc = _mm_slli_epi32(bb2, 1);
-
-			for(UINT ofs_y = ofs_y0; ofs_y <= ofs_y1; ofs_y = StepY2(ofs_y))
+			if (lx1 - lx0 <= 2*BlockSize || ly1 - ly0 <= 2*BlockSize)
 			{
-				// Compute barycentric coordinates 
-				float * __restrict pDepth = &pDepthBuffer[ofs_y];
-				__m128i beta = _mm_add_epi32(aa1Col, bb1Row);
-				__m128i gama = _mm_add_epi32(aa2Col, bb2Row);
-				__m128i alpha = _mm_sub_epi32(_mm_sub_epi32(sum, beta), gama);
+				int dx = lx0 - minXSnap.m128i_i32[lane];
+				int dy = ly0 - minYSnap.m128i_i32[lane];
+				int c[3];
+				for (int i=0; i < 3; i++)
+					c[i] = e[i].offs.m128i_i32[lane] + dx * e[i].stepX.m128i_i32[lane] + dy * e[i].stepY.m128i_i32[lane];
 
-				bb1Row = _mm_add_epi32(bb1Row, bb1Inc);
-				bb2Row = _mm_add_epi32(bb2Row, bb2Inc);
+				int rowIdx = ly0 * SCREENW + 2 * lx0;
+				DirectTri(&pDepthBuffer[rowIdx], c[0], c[1], c[2], block, lx1 - lx0 + 1, ly1 - ly0 + 1);
+			}
+			else
+			{
+				lx0 = minXSnap.m128i_i32[lane];
+				ly0 = minYSnap.m128i_i32[lane];
 
-				for(UINT ofs_x = ofs_x0; ofs_x <= ofs_x1; ofs_x = StepX2(ofs_x))
+				int e0min = e[0].nmin.m128i_i32[lane];
+				int e1min = e[1].nmin.m128i_i32[lane];
+				int e2min = e[2].nmin.m128i_i32[lane];
+				int e0max = e[0].nmax.m128i_i32[lane];
+				int e1max = e[1].nmax.m128i_i32[lane];
+				int e2max = e[2].nmax.m128i_i32[lane];
+
+				// Prepare for block traversal
+				int cb0max = e[0].offs.m128i_i32[lane] - e0max;
+				int cb1max = e[1].offs.m128i_i32[lane] - e1max;
+				int cb2max = e[2].offs.m128i_i32[lane] - e2max;
+				int qstep = -BlockSize;
+				int e0x = qstep * e[0].stepX.m128i_i32[lane];
+				int e1x = qstep * e[1].stepX.m128i_i32[lane];
+				int e2x = qstep * e[2].stepX.m128i_i32[lane];	
+				int e0y = BlockSize * e[0].stepY.m128i_i32[lane];
+				int e1y = BlockSize * e[1].stepY.m128i_i32[lane];
+				int e2y = BlockSize * e[2].stepY.m128i_i32[lane];	
+
+				unsigned int x0 = 0;
+				unsigned int w = lx1 - lx0;
+				float *pDepthRow = &pDepthBuffer[ly0 * SCREENW + lx0 * 2];
+
+				// Loop through block rows
+				for (int y0 = ly0; y0 <= ly1; y0 += BlockSize)
 				{
-					// Compute barycentric-interpolated depth
-					__m128 depth = zz[0];
-					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), zz[1]));
-					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), zz[2]));
+					// New block row - keep hunting for tri outer edge in old block line dir
+					while (x0 <= w && (cb0max | cb1max | cb2max) >= 0)
+				__m128i alpha = _mm_sub_epi32(_mm_sub_epi32(sum, beta), gama);
+					{
+						x0 += qstep;
+						cb0max += e0x;
+						cb1max += e1x;
+						cb2max += e2x;
+					}
 
-					//Test Pixel inside triangle
-					__m128i mask = _mm_or_si128(_mm_or_si128(alpha, beta), gama);
+					// Okay, we're now in a block we know is outside. Reverse direction and go into main loop.
+					qstep = -qstep;
+					e0x = -e0x;
+					e1x = -e1x;
+					e2x = -e2x;
+					for (;;)
+				{
+						x0 += qstep;
+						cb0max += e0x;
+						cb1max += e1x;
+						cb2max += e2x;
+
+						// End of row?
+						if (x0 > w)
+							break;
+
+						// Skip block when at least one edge completely out
+						if ((cb0max | cb1max | cb2max) < 0) continue;
 					alpha = _mm_sub_epi32(alpha, aa0Dec);
-					beta  = _mm_add_epi32(beta, aa1Inc);
-					gama  = _mm_add_epi32(gama, aa2Inc);
-					
-					// Update depth buffer
-					__m128 previousDepthValue = _mm_load_ps(&pDepth[ofs_x]);
-					depth = _mm_max_ps(depth, previousDepthValue);
-					depth = _mm_blendv_ps(depth, previousDepthValue, _mm_castsi128_ps(mask));
-					_mm_store_ps(&pDepth[ofs_x], depth);
-				}//for each column											
-			}// for each row
+						// Okay, this block is in. Render it.
+						float *pDepth = &pDepthRow[x0 * 2];
+
+						// Accept whole block when fully covered
+						int cb0 = cb0max + e0max;
+						int cb1 = cb1max + e1max;
+						int cb2 = cb2max + e2max;
+
+						//if (cb0 >= e0min && cb1 >= e1min && cb2 >= e2min)
+						//	SolidBlock(pDepth, cb0, cb1, cb2, block);
+						//else
+							PartialBlock(pDepth, cb0, cb1, cb2, block);
+					}
+
+					// Advance to next row of blocks
+					cb0max += e0y;
+					cb1max += e1y;
+					cb2max += e2y;
+					pDepthRow += BlockSize * SCREENW;
+				}
+			}
 		}// for each triangle
 	}// for each set of SIMD# triangles
 }
