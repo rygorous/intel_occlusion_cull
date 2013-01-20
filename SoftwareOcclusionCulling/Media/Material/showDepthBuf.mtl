@@ -1,0 +1,11 @@
+tex = $depthbuf_tex
+
+ReceiveShadows      = false
+
+VertexShaderFile    = showDepthBuf.fx
+VertexShaderMain    = VSMain
+VertexShaderProfile = vs_4_0
+PixelShaderFile     = showDepthBuf.fx
+PixelShaderMain     = PSMain
+PixelShaderProfile  = ps_4_0
+RenderStateFile     = showDepthBuf.rs
