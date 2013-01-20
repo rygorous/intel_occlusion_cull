@@ -15,6 +15,7 @@
 //--------------------------------------------------------------------------------------
 #include "SoftwareOcclusionCulling.h"
 #include "CPUTRenderTarget.h"
+#include "CPUTTextureDX11.h"
 
 const UINT SHADOW_WIDTH_HEIGHT = 256;
 
@@ -138,6 +139,31 @@ void MySample::Create()
     CPUTMaterial::mGlobalProperties.AddValue( _L("cbPerModelValues"), _L("#cbPerModelValues") );
     CPUTMaterial::mGlobalProperties.AddValue( _L("_Shadow"), _L("$shadow_depth") );
 
+	// Creating a render target to view the CPU rasterized depth buffer
+	mpCPUDepthBuf = new unsigned char[SCREENW*SCREENH*4];
+
+	CD3D11_TEXTURE2D_DESC cpuRenderTargetDesc(
+            DXGI_FORMAT_R8G8B8A8_UNORM,
+            SCREENW, // TODO: round up to full tile sizes
+            SCREENH,
+            1, // Array Size
+            1, // MIP Levels
+			D3D11_BIND_SHADER_RESOURCE,
+            D3D11_USAGE_DEFAULT,
+			0
+        );
+	HRESULT hr = mpD3dDevice->CreateTexture2D(&cpuRenderTargetDesc, NULL, &mpCPURenderTarget);
+	ASSERT(SUCCEEDED(hr), _L("Failed creating render target."));
+
+	hr = mpD3dDevice->CreateShaderResourceView(mpCPURenderTarget, NULL, &mpCPUSRV);
+	ASSERT(SUCCEEDED(hr), _L("Failed creating shader resource view."));
+
+	// Corresponding texture object
+	CPUTTextureDX11 *pDummyTex = new CPUTTextureDX11;
+	pDummyTex->SetTextureAndShaderResourceView(mpCPURenderTarget, mpCPUSRV);
+	pAssetLibrary->AddTexture( _L("$depthbuf_tex"), pDummyTex );
+	SAFE_RELEASE(pDummyTex);
+
     // Create default shaders
     CPUTPixelShaderDX11  *pPS       = CPUTPixelShaderDX11::CreatePixelShaderFromMemory(            _L("$DefaultShader"), CPUT_DX11::mpD3dDevice,          _L("PSMain"), _L("ps_4_0"), gpDefaultShaderSource );
     CPUTPixelShaderDX11  *pPSNoTex  = CPUTPixelShaderDX11::CreatePixelShaderFromMemory(   _L("$DefaultShaderNoTexture"), CPUT_DX11::mpD3dDevice, _L("PSMainNoTexture"), _L("ps_4_0"), gpDefaultShaderSource );
@@ -163,6 +189,9 @@ void MySample::Create()
 
 	int width, height;
     CPUTOSServices::GetOSServices()->GetClientDimensions(&width, &height);
+
+	// Depth buffer visualization material
+	mpShowDepthBufMtrl = (CPUTMaterialDX11*)CPUTAssetLibraryDX11::GetAssetLibrary()->GetMaterial( _L("showDepthBuf") );
 
     // Call ResizeWindow() because it creates some resources that our blur material needs (e.g., the back buffer)
     ResizeWindow(width, height);
@@ -352,20 +381,6 @@ void MySample::Create()
     mpCameraController->SetCamera(mpCamera);
     mpCameraController->SetLookSpeed(0.004f);
     mpCameraController->SetMoveSpeed(2.5f);
-
-	// Creating a render target to view the CPU rasterized depth buffer
-	CD3D11_TEXTURE2D_DESC cpuRenderTargetDesc(
-            DXGI_FORMAT_R8G8B8A8_UNORM,
-            SCREENW, // TODO: round up to full tile sizes
-            SCREENH,
-            1, // Array Size
-            1, // MIP Levels
-            0, // D3D10_BIND_*
-            D3D11_USAGE_STAGING,
-            D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE
-        );
-	HRESULT hr = mpD3dDevice->CreateTexture2D(&cpuRenderTargetDesc, NULL, &mpCPURenderTarget);
-	ASSERT(SUCCEEDED(hr), _L("Failed creating render target."));
 }
 
 //-----------------------------------------------------------------------------
@@ -647,13 +662,8 @@ void MySample::HandleCallbackEvent( CPUTEventID Event, CPUTControlID ControlID, 
 		else
 		{
 			mEnableCulling = false;
-			D3D11_MAPPED_SUBRESOURCE depthTexture;
-			UINT mappedSubresourceIndex = D3D10CalcSubresource(0, 0, 1);
-			mpContext->Map(mpCPURenderTarget, mappedSubresourceIndex, D3D11_MAP_READ_WRITE, 0, &depthTexture);
-			mpCPURenderTargetPixels = (UINT*)depthTexture.pData;
 			//TODO: clear to zero in threads instead of here 
-			memset(depthTexture.pData, 0, depthTexture.RowPitch * SCREENH);
-			mpContext->Unmap(mpCPURenderTarget, mappedSubresourceIndex);
+			memset(mpCPUDepthBuf, 0, SCREENW * SCREENH * 4);
 
 			mpOccludersR2DBText->SetText(         _L("\tDepth rasterized models: 0"));
 			mpOccluderRasterizedTrisText->SetText(_L("\tDepth rasterized tris: \t0"));
@@ -768,18 +778,12 @@ void MySample::Render(double deltaSeconds)
 		// Set the camera transforms so that the occluders can be transformed 
 		mpDBR->SetViewProj(mpCamera->GetViewMatrix(), (float4x4*)mpCamera->GetProjectionMatrix());
 	
-		D3D11_MAPPED_SUBRESOURCE depthTexture;
-		UINT mappedSubresourceIndex = D3D10CalcSubresource(0, 0, 1);
-		// Map the depth buffer to update it
-		mpContext->Map(mpCPURenderTarget, mappedSubresourceIndex, D3D11_MAP_READ_WRITE, 0, &depthTexture);
-		mpCPURenderTargetPixels = (UINT*)depthTexture.pData;
 		// Clear the depth buffer
-		memset(depthTexture.pData, 0, depthTexture.RowPitch * SCREENH);
+		mpCPURenderTargetPixels = (UINT*)mpCPUDepthBuf;
+		memset(mpCPURenderTargetPixels, 0, SCREENW * SCREENH * 4);
 		mpDBR->SetCPURenderTargetPixels(mpCPURenderTargetPixels);
 		// Transform the occluder models and rasterize them to the depth buffer
 		mpDBR->TransformModelsAndRasterizeToDepthBuffer();
-		// Unmap the depth buffer after update
-		mpContext->Unmap(mpCPURenderTarget, mappedSubresourceIndex);
 	
 		// Set the camera transforms so that the occludee abix aligned bounding boxes (AABB) can be transformed
 		mpAABB->SetViewProjMatrix(mpCamera->GetViewMatrix(), (float4x4*)mpCamera->GetProjectionMatrix());
@@ -800,7 +804,11 @@ void MySample::Render(double deltaSeconds)
 	// If mViewDepthBuffer is enabled then blit the CPU rasterized depth buffer to the frame buffer
 	if(mViewDepthBuffer)
 	{
-		mpContext->CopyResource(mpBackBuffer, mpCPURenderTarget);
+		// Update the GPU-side depth buffer
+		mpContext->UpdateSubresource(mpCPURenderTarget, 0, NULL, mpCPUDepthBuf, SCREENW * 4, 0);
+		mpShowDepthBufMtrl->SetRenderStates(renderParams);
+		mpContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+		mpContext->Draw(3, 0);
 	}
 	// else render the (frustum culled) occluders and only the visible occludees
 	else

@@ -271,9 +271,12 @@
     <None Include="Media\Castle\Asset\stoneWallsDebug.set" />
     <None Include="Media\Castle\Material\BoundingBox.mtl" />
     <None Include="Media\Material\shadowCast.mtl" />
+    <None Include="Media\Material\showDepthBuf.mtl" />
     <None Include="Media\Material\sprite.mtl" />
     <None Include="Media\Shader\shadowCast.fx" />
     <None Include="Media\Shader\shadowCast.rs" />
+    <None Include="Media\Shader\showDepthBuf.fx" />
+    <None Include="Media\Shader\showDepthBuf.rs" />
     <None Include="Media\Shader\Sprite.fx" />
     <None Include="Media\Shader\sprite.rs" />
     <None Include="Media\Teapot\Asset\teapot.set" />

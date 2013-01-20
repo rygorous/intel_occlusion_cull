@@ -91,7 +91,11 @@ private:
 	CPUTAssetSet		  *mpAssetSetAABB[OCCLUDEE_SETS];
 	CPUTAssetSet		  *mpAssetSetSky;
 
+	CPUTMaterialDX11	  *mpShowDepthBufMtrl;
+
+	unsigned char			*mpCPUDepthBuf;
 	ID3D11Texture2D         *mpCPURenderTarget;
+	ID3D11ShaderResourceView *mpCPUSRV;
 	ID3D11Texture2D         *mpBackBuffer;
 	ID3D11RenderTargetView  *mpRTView;
 
@@ -165,7 +169,9 @@ public:
 		mpVsyncCheckBox(NULL),
 		mpDrawCallsText(NULL),
 		mpDepthTestTaskSlider(NULL),
+		mpCPUDepthBuf(NULL),
 		mpCPURenderTarget(NULL),
+		mpCPUSRV(NULL),
 		mpBackBuffer(NULL),
 		mpRTView(NULL),
 		mSOCType(SSE_TYPE),
@@ -201,6 +207,7 @@ public:
 		}
 
 		mpAssetSetSky = NULL;
+		mpShowDepthBufMtrl = NULL;
 
 		if((mSOCType == SCALAR_TYPE) && !mEnableTasks)
 		{
@@ -241,7 +248,9 @@ public:
         SAFE_RELEASE(mpCamera);
         SAFE_RELEASE(mpShadowCamera);
 
+		delete[] mpCPUDepthBuf;
 		SAFE_RELEASE(mpCPURenderTarget);
+		SAFE_RELEASE(mpCPUSRV);
 		if(mViewDepthBuffer)
 		{
 			SAFE_RELEASE(mpBackBuffer);
@@ -262,6 +271,7 @@ public:
         SAFE_DELETE( mpDebugSprite);
         SAFE_RELEASE(mpShadowCameraSet);
         SAFE_DELETE( mpShadowRenderTarget );
+		SAFE_RELEASE( mpShowDepthBufMtrl );
 
         CPUTModel::ReleaseStaticResources();
     }
