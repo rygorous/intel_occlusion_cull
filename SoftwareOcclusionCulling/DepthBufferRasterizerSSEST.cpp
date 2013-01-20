@@ -126,7 +126,7 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
 	__m128i colOffset = _mm_setr_epi32(0, 1, 0, 1);
 	__m128i rowOffset = _mm_setr_epi32(0, 0, 1, 1);
 
-	float* pDepthBuffer = (float*)mpRenderTargetPixels; 
+	float* pDepthBuffer = (float*)mpRenderTargetPixels;
 
 	// Based on TaskId determine which tile to process
 	UINT screenWidthInTiles = SCREENW/TILE_WIDTH_IN_PIXELS;

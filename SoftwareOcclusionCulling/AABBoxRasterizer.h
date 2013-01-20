@@ -38,7 +38,7 @@ class AABBoxRasterizer
 		virtual void ResetInsideFrustum() = 0; 
 		virtual void IsInsideViewFrustum(CPUTCamera *pCamera) = 0;
 		virtual void SetViewProjMatrix(float4x4 *viewMatrix, float4x4 *projMatrix) = 0;
-		virtual void SetCPURenderTargetPixels(UINT *pRenderTargetPixels) = 0;
+		virtual void SetCPURenderTargetPixels(UINT *pRenderTargetPixels, UINT pitch) = 0;
 		virtual void SetDepthTestTasks(UINT numTasks) = 0;
 		virtual void SetOccludeeSizeThreshold(float occludeeSizeThreshold) = 0;
 		virtual void SetCamera(CPUTCamera *pCamera) = 0;

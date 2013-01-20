@@ -40,7 +40,11 @@ class DepthBufferRasterizerScalar : public DepthBufferRasterizer, public HelperS
 		// Set the view and projection matrices
 		inline void SetViewProj(float4x4 *viewMatrix, float4x4 *projMatrix);
 		
-		inline void SetCPURenderTargetPixels(UINT *pRenderTargetPixels){mpRenderTargetPixels = pRenderTargetPixels;}
+		inline void SetCPURenderTargetPixels(UINT *pRenderTargetPixels, UINT pitch)
+		{
+			mpRenderTargetPixels = pRenderTargetPixels;
+			mDepthPitch = pitch;
+		}
 		
 		inline void SetOccluderSizeThreshold(float occluderSizeThreshold)
 		{
@@ -88,6 +92,7 @@ class DepthBufferRasterizerScalar : public DepthBufferRasterizer, public HelperS
 		float4x4 *mViewMatrix;
 		float4x4 *mProjMatrix;
 		UINT *mpRenderTargetPixels;
+		UINT mDepthPitch;
 		UINT mNumRasterized;
 		UINT	*mpBin;				 // triangle index
 		USHORT  *mpBinModel;		 // model Index	

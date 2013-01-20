@@ -212,7 +212,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(VOID* tas
 	sample->RasterizeBinnedTrianglesToDepthBuffer(taskId, taskCount);
 }
 
-static const int BlockLog2 = 2;
+static const int BlockLog2 = 3;
 static const int BlockSize = 1 << BlockLog2;
 
 struct FourEdges
@@ -254,8 +254,9 @@ struct BlockSetup
 {
 	StepEdge e[3];
 	__m128 z[3];
+	int pitch;
 
-	__forceinline void setup(const FourEdges edge[], const __m128 Z[], int lane)
+	__forceinline void setup(const FourEdges edge[], const __m128 Z[], int lane, int depthPitch)
 	{
 		__m128i colOffs = _mm_setr_epi32(0, 1, 0, 1);
 		__m128i rowOffs = _mm_setr_epi32(0, 0, 1, 1);
@@ -273,6 +274,7 @@ struct BlockSetup
 		z[0] = _mm_set1_ps(Z[0].m128_f32[lane]);
 		z[1] = _mm_set1_ps(Z[1].m128_f32[lane]);
 		z[2] = _mm_set1_ps(Z[2].m128_f32[lane]);
+		pitch = 2*depthPitch;
 	}
 };
 
@@ -282,7 +284,7 @@ static __forceinline void DirectTri(float *pDepthRow, int e0, int e1, int e2, Bl
 	__m128i betaRow = _mm_add_epi32(_mm_set1_epi32(e1), setup.e[1].offs);
 	__m128i gamaRow = _mm_add_epi32(_mm_set1_epi32(e2), setup.e[2].offs);
 
-	for (int y=0; y < h; y += 2, pDepthRow += 2*SCREENW)
+	for (int y=0; y < h; y += 2, pDepthRow += setup.pitch)
 	{
 		float *pDepth = pDepthRow;
 
@@ -326,7 +328,7 @@ static __forceinline void PartialBlock(float *pDepth, int e0, int e1, int e2, Bl
 	__m128i beta = _mm_add_epi32(_mm_set1_epi32(e1), setup.e[1].offs);
 	__m128i gama = _mm_add_epi32(_mm_set1_epi32(e2), setup.e[2].offs);
 
-	for (int y=0; y < BlockSize; y += 2, pDepth += 2*SCREENW - 2*BlockSize)
+	for (int y=0; y < BlockSize; y += 2, pDepth += setup.pitch - 2*BlockSize)
 	{
 		for (int x=0; x < BlockSize; x += 2, pDepth += 4)
 		{
@@ -363,7 +365,7 @@ static __forceinline void SolidBlock(float *pDepth, int e0, int e1, int e2, Bloc
 	__m128i beta = _mm_add_epi32(_mm_set1_epi32(e1), setup.e[1].offs);
 	__m128i gama = _mm_add_epi32(_mm_set1_epi32(e2), setup.e[2].offs);
 
-	for (int y=0; y < BlockSize; y += 2, pDepth += 2*SCREENW - 2*BlockSize)
+	for (int y=0; y < BlockSize; y += 2, pDepth += setup.pitch - 2*BlockSize)
 	{
 		for (int x=0; x < BlockSize; x += 2, pDepth += 4)
 		{
@@ -396,7 +398,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 	// so to enable the two to have to set bits 6 and 15 which 1000 0000 0100 0000 = 0x8040
 	_mm_setcsr( _mm_getcsr() | 0x8040 );
 
-	float* pDepthBuffer = (float*)mpRenderTargetPixels; 
+	float* pDepthBuffer = (float*)mpRenderTargetPixels;
 
 	// Based on TaskId determine which tile to process
 	UINT screenWidthInTiles = SCREENW/TILE_WIDTH_IN_PIXELS;
@@ -534,7 +536,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 				continue;
 			__m128i aa0Dec = _mm_add_epi32(aa1Inc, aa2Inc);
 			BlockSetup block;
-			block.setup(e, Z, lane);
+			block.setup(e, Z, lane, mDepthPitch);
 
 			if (lx1 - lx0 <= 2*BlockSize || ly1 - ly0 <= 2*BlockSize)
 			{
@@ -544,7 +546,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 				for (int i=0; i < 3; i++)
 					c[i] = e[i].offs.m128i_i32[lane] + dx * e[i].stepX.m128i_i32[lane] + dy * e[i].stepY.m128i_i32[lane];
 
-				int rowIdx = ly0 * SCREENW + 2 * lx0;
+				int rowIdx = ly0 * mDepthPitch + 2 * lx0;
 				DirectTri(&pDepthBuffer[rowIdx], c[0], c[1], c[2], block, lx1 - lx0 + 1, ly1 - ly0 + 1);
 			}
 			else
@@ -573,7 +575,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 
 				unsigned int x0 = 0;
 				unsigned int w = lx1 - lx0;
-				float *pDepthRow = &pDepthBuffer[ly0 * SCREENW + lx0 * 2];
+				float *pDepthRow = &pDepthBuffer[ly0 * mDepthPitch  + lx0 * 2];
 
 				// Loop through block rows
 				for (int y0 = ly0; y0 <= ly1; y0 += BlockSize)
@@ -625,7 +627,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 					cb0max += e0y;
 					cb1max += e1y;
 					cb2max += e2y;
-					pDepthRow += BlockSize * SCREENW;
+					pDepthRow += BlockSize * mDepthPitch;
 				}
 			}
 		}// for each triangle

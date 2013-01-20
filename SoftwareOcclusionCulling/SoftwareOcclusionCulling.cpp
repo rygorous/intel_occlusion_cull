@@ -139,7 +139,8 @@ void MySample::Create()
     CPUTMaterial::mGlobalProperties.AddValue( _L("_Shadow"), _L("$shadow_depth") );
 
 	// Creating a render target to view the CPU rasterized depth buffer
-	mpCPUDepthBuf = new unsigned char[SCREENW*SCREENH*4];
+	mDepthPitch = SCREENW + 16;
+	mpCPUDepthBuf = (unsigned char *) _aligned_malloc(mDepthPitch * SCREENH * 4, 64);
 
 	CD3D11_TEXTURE2D_DESC cpuRenderTargetDesc(
             DXGI_FORMAT_R8G8B8A8_UNORM,
@@ -777,14 +778,14 @@ void MySample::Render(double deltaSeconds)
 	
 		// Clear the depth buffer
 		mpCPURenderTargetPixels = (UINT*)mpCPUDepthBuf;
-		memset(mpCPURenderTargetPixels, 0, SCREENW * SCREENH * 4);
-		mpDBR->SetCPURenderTargetPixels(mpCPURenderTargetPixels);
+		memset(mpCPURenderTargetPixels, 0, mDepthPitch * SCREENH * 4);
+		mpDBR->SetCPURenderTargetPixels(mpCPURenderTargetPixels, mDepthPitch);
 		// Transform the occluder models and rasterize them to the depth buffer
 		mpDBR->TransformModelsAndRasterizeToDepthBuffer();
 	
 		// Set the camera transforms so that the occludee abix aligned bounding boxes (AABB) can be transformed
 		mpAABB->SetViewProjMatrix(mpCamera->GetViewMatrix(), (float4x4*)mpCamera->GetProjectionMatrix());
-		mpAABB->SetCPURenderTargetPixels(mpCPURenderTargetPixels);
+		mpAABB->SetCPURenderTargetPixels(mpCPURenderTargetPixels, mDepthPitch);
 		// Transform the occludee AABB, rasterize and depth test to determine is occludee is visible or occluded 
 		mpAABB->TransformAABBoxAndDepthTest();
 				

@@ -94,6 +94,7 @@ private:
 	CPUTMaterialDX11	  *mpShowDepthBufMtrl;
 
 	unsigned char			*mpCPUDepthBuf;
+	UINT					 mDepthPitch;
 	ID3D11Texture2D         *mpCPURenderTarget;
 	ID3D11ShaderResourceView *mpCPUSRV;
 	ID3D11Texture2D         *mpBackBuffer;
@@ -248,7 +249,7 @@ public:
         SAFE_RELEASE(mpCamera);
         SAFE_RELEASE(mpShadowCamera);
 
-		delete[] mpCPUDepthBuf;
+		_aligned_free(mpCPUDepthBuf);
 		SAFE_RELEASE(mpCPURenderTarget);
 		SAFE_RELEASE(mpCPUSRV);
 		if(mViewDepthBuffer)
