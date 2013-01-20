@@ -524,8 +524,8 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 		// Bounding rectangle
 		__m128i minX = Max(Min(Min(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileStartX));
 		__m128i minY = Max(Min(Min(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(tileStartY));
-		__m128i maxX = Min(Max(Max(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileEndX - 1));
-		__m128i maxY = Min(Max(Max(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(tileEndY - 1));
+		__m128i maxX = Min(Max(Max(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileEndX));
+		__m128i maxY = Min(Max(Max(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(tileEndY));
 
 		// Start in corner of block
 		__m128i minXSnap = _mm_and_si128(minX, _mm_set1_epi32(-BlockSize));
