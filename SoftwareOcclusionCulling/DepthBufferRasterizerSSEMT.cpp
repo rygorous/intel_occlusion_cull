@@ -369,6 +369,11 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			__m128i aa1Inc = _mm_slli_epi32(aa1, 1);
 			__m128i aa2Inc = _mm_slli_epi32(aa2, 1);
 
+			// When we interpolate, beta and gama have already been advanced
+			// by one block, so compensate here.
+			zz[0] = _mm_sub_ps(zz[0], _mm_mul_ps(_mm_cvtepi32_ps(aa1Inc), zz[1]));
+			zz[0] = _mm_sub_ps(zz[0], _mm_mul_ps(_mm_cvtepi32_ps(aa2Inc), zz[2]));
+
 			__m128i row, col;
 
 			// Tranverse pixels in 2x2 blocks and store 2x2 pixel quad depthscontiguously in memory ==> 2*X
@@ -404,14 +409,14 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 				__m128i beta = _mm_add_epi32(aa1Col, bb1Row);
 				__m128i gama = _mm_add_epi32(aa2Col, bb2Row);
 
-				for(float *pDepth = pDepthStart; pDepth < pDepthEnd; pDepth += 4,
-						alpha = _mm_add_epi32(alpha, aa0Inc),
-						beta  = _mm_add_epi32(beta, aa1Inc),
-						gama  = _mm_add_epi32(gama, aa2Inc))
+				for(float *pDepth = pDepthStart; pDepth < pDepthEnd; pDepth += 4)
 				{
 					//Test Pixel inside triangle
 					__m128i mask = _mm_or_si128(_mm_or_si128(alpha, beta), gama);
-					
+					alpha = _mm_add_epi32(alpha, aa0Inc);
+					beta  = _mm_add_epi32(beta, aa1Inc);
+					gama  = _mm_add_epi32(gama, aa2Inc);
+
 					// Early out if all of this quad's pixels are outside the triangle.
 					if(_mm_testc_si128(mask, _mm_set1_epi32(0x80000000)))
 					{
