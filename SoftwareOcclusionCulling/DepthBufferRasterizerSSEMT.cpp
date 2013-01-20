@@ -569,9 +569,6 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			int ly1 = maxY.m128i_i32[lane];
 
 
-			if (lx1 < lx0 || ly1 < ly0) // Can happen when tris are pessimistically binned
-				continue;
-			__m128i aa0Dec = _mm_add_epi32(aa1Inc, aa2Inc);
 			BlockSetup block;
 			block.setup(e, Z, lane, mDepthPitch);
 
