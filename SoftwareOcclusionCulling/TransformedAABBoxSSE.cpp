@@ -219,37 +219,32 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 		Gather(xformedPos, i);
 
 		// use fixed-point only for X and Y.  Avoid work for Z and W.
-        vFxPt4 xFormedFxPtPos[3];
-		for(int m = 0; m < 3; m++)
+		__m128i fixX[3], fixY[3];
+		for(int i = 0; i < 3; i++)
 		{
-			xFormedFxPtPos[m].X = _mm_cvtps_epi32(xformedPos[m].X);
-			xFormedFxPtPos[m].Y = _mm_cvtps_epi32(xformedPos[m].Y);
-			xFormedFxPtPos[m].Z = _mm_cvtps_epi32(xformedPos[m].Z);
-			xFormedFxPtPos[m].W = _mm_cvtps_epi32(xformedPos[m].W);
+			fixX[i] = _mm_cvtps_epi32(xformedPos[i].X);
+			fixY[i] = _mm_cvtps_epi32(xformedPos[i].Y);
 		}
 
 		// Fab(x, y) =     Ax       +       By     +      C              = 0
 		// Fab(x, y) = (ya - yb)x   +   (xb - xa)y + (xa * yb - xb * ya) = 0
 		// Compute A = (ya - yb) for the 3 line segments that make up each triangle
-		__m128i A0 = _mm_sub_epi32(xFormedFxPtPos[1].Y, xFormedFxPtPos[2].Y);
-		__m128i A1 = _mm_sub_epi32(xFormedFxPtPos[2].Y, xFormedFxPtPos[0].Y);
-		__m128i A2 = _mm_sub_epi32(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y);
+		__m128i A0 = _mm_sub_epi32(fixY[1], fixY[2]);
+		__m128i A1 = _mm_sub_epi32(fixY[2], fixY[0]);
+		__m128i A2 = _mm_sub_epi32(fixY[0], fixY[1]);
 
 		// Compute B = (xb - xa) for the 3 line segments that make up each triangle
-		__m128i B0 = _mm_sub_epi32(xFormedFxPtPos[2].X, xFormedFxPtPos[1].X);
-		__m128i B1 = _mm_sub_epi32(xFormedFxPtPos[0].X, xFormedFxPtPos[2].X);
-		__m128i B2 = _mm_sub_epi32(xFormedFxPtPos[1].X, xFormedFxPtPos[0].X);
+		__m128i B0 = _mm_sub_epi32(fixX[2], fixX[1]);
+		__m128i B1 = _mm_sub_epi32(fixX[0], fixX[2]);
+		__m128i B2 = _mm_sub_epi32(fixX[1], fixX[0]);
 
 		// Compute C = (xa * yb - xb * ya) for the 3 line segments that make up each triangle
-		__m128i C0 = _mm_sub_epi32(_mm_mullo_epi32(xFormedFxPtPos[1].X, xFormedFxPtPos[2].Y), _mm_mullo_epi32(xFormedFxPtPos[2].X, xFormedFxPtPos[1].Y));
-		__m128i C1 = _mm_sub_epi32(_mm_mullo_epi32(xFormedFxPtPos[2].X, xFormedFxPtPos[0].Y), _mm_mullo_epi32(xFormedFxPtPos[0].X, xFormedFxPtPos[2].Y));
-		__m128i C2 = _mm_sub_epi32(_mm_mullo_epi32(xFormedFxPtPos[0].X, xFormedFxPtPos[1].Y), _mm_mullo_epi32(xFormedFxPtPos[1].X, xFormedFxPtPos[0].Y));
+		__m128i C0 = _mm_sub_epi32(_mm_mullo_epi32(fixX[1], fixY[2]), _mm_mullo_epi32(fixX[2], fixY[1]));
+		__m128i C1 = _mm_sub_epi32(_mm_mullo_epi32(fixX[2], fixY[0]), _mm_mullo_epi32(fixX[0], fixY[2]));
+		__m128i C2 = _mm_sub_epi32(_mm_mullo_epi32(fixX[0], fixY[1]), _mm_mullo_epi32(fixX[1], fixY[0]));
 
 		// Compute triangle area
-		__m128i triArea = _mm_mullo_epi32(A0, xFormedFxPtPos[0].X);
-		triArea = _mm_add_epi32(triArea, _mm_mullo_epi32(B0, xFormedFxPtPos[0].Y));
-		triArea = _mm_add_epi32(triArea, C0);
-
+		__m128i triArea = _mm_add_epi32(_mm_add_epi32(C0, C1), C2);
 		__m128 oneOverTriArea = _mm_div_ps(_mm_set1_ps(1.0f), _mm_cvtepi32_ps(triArea));
 
 		// Z setup
@@ -259,11 +254,11 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 		Z[2] = _mm_mul_ps(_mm_sub_ps(xformedPos[2].Z, xformedPos[0].Z), oneOverTriArea);
 
 		// Use bounding box traversal strategy to determine which pixels to rasterize 
-		__m128i startX = _mm_and_si128(Max(Min(Min(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(0)), _mm_set1_epi32(0xFFFFFFFE));
-		__m128i endX   = Min(_mm_add_epi32(Max(Max(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(1)), _mm_set1_epi32(SCREENW));
+		__m128i startX = _mm_and_si128(Max(Min(Min(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(0)), _mm_set1_epi32(0xFFFFFFFE));
+		__m128i endX   = Min(_mm_add_epi32(Max(Max(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(1)), _mm_set1_epi32(SCREENW));
 
-		__m128i startY = _mm_and_si128(Max(Min(Min(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(0)), _mm_set1_epi32(0xFFFFFFFE));
-		__m128i endY   = Min(_mm_add_epi32(Max(Max(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(1)), _mm_set1_epi32(SCREENH));
+		__m128i startY = _mm_and_si128(Max(Min(Min(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(0)), _mm_set1_epi32(0xFFFFFFFE));
+		__m128i endY   = Min(_mm_add_epi32(Max(Max(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(1)), _mm_set1_epi32(SCREENH));
 
 		for(int vv = 0; vv < 3; vv++) 
 		{
@@ -326,7 +321,7 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 
 			__m128i row, col;
 
-			// Tranverse pixels in 2x2 blocks and store 2x2 pixel quad depths contiguously in memory ==> 2*X
+			// Traverse pixels in 2x2 blocks and store 2x2 pixel quad depths contiguously in memory ==> 2*X
 			// This method provides better perfromance
 			int rowIdx = (startYy * SCREENW + 2 * startXx);
 			int rowSamples = (endXx - startXx) * 2;
