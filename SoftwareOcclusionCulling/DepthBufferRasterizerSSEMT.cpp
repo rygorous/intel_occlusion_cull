@@ -219,8 +219,6 @@ struct FourEdges
 {
 	__m128i stepX;
 	__m128i stepY;
-	__m128i stepQuad;
-	__m128i stepLine;
 	__m128i offs;
 	__m128i nmin;
 	__m128i nmax;
@@ -229,8 +227,6 @@ struct FourEdges
 	{
 		stepX = _mm_sub_epi32(y0, y1);
 		stepY = _mm_sub_epi32(x1, x0);
-		stepQuad = _mm_slli_epi32(stepX, 1);
-		stepLine = _mm_sub_epi32(_mm_slli_epi32(stepY, 1), _mm_slli_epi32(stepX, BlockLog2));
 
 		offs = _mm_sub_epi32(_mm_setzero_si128(), _mm_mullo_epi32(x0, stepX));
 		offs = _mm_sub_epi32(offs, _mm_mullo_epi32(y0, stepY));
@@ -253,13 +249,13 @@ struct FourEdges
 
 struct StepEdge
 {
-	__m128i offs, quad, line, stepY;
+	__m128i offs, quadX, quadY, line;
 };
 
 struct BlockSetup
 {
 	StepEdge e[3];
-	__m128 z[3];
+	__m128 z[4];
 	int pitch;
 
 	__forceinline void setup(const FourEdges edge[], const __m128 Z[], int lane, int depthPitch)
@@ -272,19 +268,28 @@ struct BlockSetup
 			__m128i stepX = _mm_set1_epi32(edge[i].stepX.m128i_i32[lane]);
 			__m128i stepY = _mm_set1_epi32(edge[i].stepY.m128i_i32[lane]);
 			e[i].offs = _mm_add_epi32(_mm_mullo_epi32(colOffs, stepX), _mm_mullo_epi32(rowOffs, stepY));
-			e[i].quad = _mm_set1_epi32(edge[i].stepQuad.m128i_i32[lane]);
-			e[i].line = _mm_set1_epi32(edge[i].stepLine.m128i_i32[lane]);
-			e[i].stepY = _mm_slli_epi32(stepY, 1);
+			e[i].quadX = _mm_slli_epi32(stepX, 1);
+			e[i].quadY = _mm_slli_epi32(stepY, 1);
+			e[i].line = _mm_sub_epi32(e[i].quadY, _mm_slli_epi32(stepX, BlockLog2));
 		}
 
-		z[0] = _mm_set1_ps(Z[0].m128_f32[lane]);
-		z[1] = _mm_set1_ps(Z[1].m128_f32[lane]);
-		z[2] = _mm_set1_ps(Z[2].m128_f32[lane]);
+		for (int i=0; i < 4; i++)
+			z[i] = _mm_set1_ps(Z[i].m128_f32[lane]);
+		z[3] = _mm_add_ps(z[3], z[3]);
+
 		pitch = 2*depthPitch;
 	}
 };
 
-static __forceinline void DirectTri(float *pDepthRow, int e0, int e1, int e2, BlockSetup &setup, int w, int h)
+static __forceinline __m128 BaryDepth(const BlockSetup &setup, const __m128i &beta, const __m128i &gama)
+{
+	__m128 depth = setup.z[0];
+	depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), setup.z[1]));
+	depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), setup.z[2]));
+	return depth;
+}
+
+static __forceinline void DirectTri(float *pDepthRow, int e0, int e1, int e2, const BlockSetup &setup, int w, int h)
 {
 	__m128i alphRow = _mm_add_epi32(_mm_set1_epi32(e0), setup.e[0].offs);
 	__m128i betaRow = _mm_add_epi32(_mm_set1_epi32(e1), setup.e[1].offs);
@@ -297,34 +302,31 @@ static __forceinline void DirectTri(float *pDepthRow, int e0, int e1, int e2, Bl
 		__m128i alph = alphRow;
 		__m128i beta = betaRow;
 		__m128i gama = gamaRow;
+		__m128 depth = BaryDepth(setup, beta, gama);
 
-		for (float *pDepth = pDepthRow; pDepth < pDepthEnd; pDepth += 4)
+		for (float *pDepth = pDepthRow; pDepth < pDepthEnd; pDepth += 4, depth = _mm_add_ps(depth, setup.z[3]))
 		{
 			// Test pixel inside triangle
 			__m128i mask = _mm_or_si128(_mm_or_si128(alph, beta), gama);
-			alph = _mm_add_epi32(alph, setup.e[0].quad);
-			beta = _mm_add_epi32(beta, setup.e[1].quad);
-			gama = _mm_add_epi32(gama, setup.e[2].quad);
+			alph = _mm_add_epi32(alph, setup.e[0].quadX);
+			beta = _mm_add_epi32(beta, setup.e[1].quadX);
+			gama = _mm_add_epi32(gama, setup.e[2].quadX);
 
 			// Early out if all of this quad's pixels are outside the triangle
 			if(_mm_testc_si128(mask, _mm_set1_epi32(0x80000000)))
 				continue;
 
 			// Compute barycentric-interpolated depth
-			__m128 depth = setup.z[0];
-			depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), setup.z[1]));
-			depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), setup.z[2]));
-
 			__m128 prevDepth = _mm_load_ps(pDepth);
 			__m128 depthMask = _mm_cmpge_ps(depth, prevDepth);
 			__m128 finalMask = _mm_andnot_ps(_mm_castsi128_ps(mask), depthMask);
-			depth = _mm_blendv_ps(prevDepth, depth, finalMask);
-			_mm_store_ps(pDepth, depth);
+			__m128 oDepth = _mm_blendv_ps(prevDepth, depth, finalMask);
+			_mm_store_ps(pDepth, oDepth);
 		}
 
-		alphRow = _mm_add_epi32(alphRow, setup.e[0].stepY);
-		betaRow = _mm_add_epi32(betaRow, setup.e[1].stepY);
-		gamaRow = _mm_add_epi32(gamaRow, setup.e[2].stepY);
+		alphRow = _mm_add_epi32(alphRow, setup.e[0].quadY);
+		betaRow = _mm_add_epi32(betaRow, setup.e[1].quadY);
+		gamaRow = _mm_add_epi32(gamaRow, setup.e[2].quadY);
 	}
 }
 
@@ -336,28 +338,26 @@ static __forceinline void PartialBlock(float *pDepth, __m128i e, BlockSetup &set
 
 	for (int y=0; y < BlockSize; y += 2, pDepth += setup.pitch)
 	{
-		for (int x=0; x < BlockSize; x += 2)
+		__m128 depth = BaryDepth(setup, beta, gama);
+
+		for (int x=0; x < BlockSize; x += 2, depth = _mm_add_ps(depth, setup.z[3]))
 		{
 			// Test pixel inside triangle
 			__m128i mask = _mm_or_si128(_mm_or_si128(alph, beta), gama);
-			alph = _mm_add_epi32(alph, setup.e[0].quad);
-			beta = _mm_add_epi32(beta, setup.e[1].quad);
-			gama = _mm_add_epi32(gama, setup.e[2].quad);
+			alph = _mm_add_epi32(alph, setup.e[0].quadX);
+			beta = _mm_add_epi32(beta, setup.e[1].quadX);
+			gama = _mm_add_epi32(gama, setup.e[2].quadX);
 
 			// Early out if all of this quad's pixels are outside the triangle
 			if(_mm_testc_si128(mask, _mm_set1_epi32(0x80000000)))
 				continue;
 
 			// Compute barycentric-interpolated depth
-			__m128 depth = setup.z[0];
-			depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), setup.z[1]));
-			depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), setup.z[2]));
-
 			__m128 prevDepth = _mm_load_ps(&pDepth[x*2]);
 			__m128 depthMask = _mm_cmpge_ps(depth, prevDepth);
 			__m128 finalMask = _mm_andnot_ps(_mm_castsi128_ps(mask), depthMask);
-			depth = _mm_blendv_ps(prevDepth, depth, finalMask);
-			_mm_store_ps(&pDepth[x*2], depth);
+			__m128 oDepth = _mm_blendv_ps(prevDepth, depth, finalMask);
+			_mm_store_ps(&pDepth[x*2], oDepth);
 		}
 
 		alph = _mm_add_epi32(alph, setup.e[0].line);
@@ -373,23 +373,18 @@ static __forceinline void SolidBlock(float *pDepth, __m128i e, BlockSetup &setup
 
 	for (int y=0; y < BlockSize; y += 2, pDepth += setup.pitch)
 	{
+		__m128 depth = BaryDepth(setup, beta, gama);
+		beta = _mm_add_epi32(beta, setup.e[1].quadY);
+		gama = _mm_add_epi32(gama, setup.e[2].quadY);
+
 		for (int x=0; x < BlockSize; x += 2)
 		{
-			beta = _mm_add_epi32(beta, setup.e[1].quad);
-			gama = _mm_add_epi32(gama, setup.e[2].quad);
-
 			// Compute barycentric-interpolated depth
-			__m128 depth = setup.z[0];
-			depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), setup.z[1]));
-			depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), setup.z[2]));
-
 			__m128 prevDepth = _mm_load_ps(&pDepth[x*2]);
 			__m128 oDepth = _mm_max_ps(depth, prevDepth);
+			depth = _mm_add_ps(depth, setup.z[3]);
 			_mm_store_ps(&pDepth[x*2], oDepth);
 		}
-
-		beta = _mm_add_epi32(beta, setup.e[1].line);
-		gama = _mm_add_epi32(gama, setup.e[2].line);
 	}
 }
 
@@ -488,7 +483,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 		// transpose input vertex data
 		// and generate fixed-point X/Y
 		__m128i fixX[3], fixY[3];
-		__m128 Z[3];
+		__m128 Z[5];
 		for(int i = 0; i < 3; i++)
 		{
 			__m128 v0 = vertBuf[0][i];
@@ -510,18 +505,6 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			Z[i]    = z;
 		}
 
-		// Bounding rectangle
-		__m128i minX = Max(Min(Min(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileStartX));
-		__m128i minY = Max(Min(Min(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(tileStartY));
-		__m128i maxX = Min(Max(Max(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileEndX - 1));
-		__m128i maxY = Min(Max(Max(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(tileEndY - 1));
-
-		// Start in corner of block
-		__m128i minXSnap = _mm_and_si128(minX, _mm_set1_epi32(~(BlockSize - 1)));
-		__m128i minYSnap = _mm_and_si128(minY, _mm_set1_epi32(~(BlockSize - 1)));
-		minX = _mm_and_si128(minX, _mm_set1_epi32(~1));
-		minY = _mm_and_si128(minY, _mm_set1_epi32(~1));
-
 		// Edges
 		FourEdges e[3];
 		e[0].setup(fixX[1], fixY[1], fixX[2], fixY[2]);
@@ -535,11 +518,20 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 		// Z setup
 		Z[1] = _mm_mul_ps(_mm_sub_ps(Z[1], Z[0]), oneOverTriArea);
 		Z[2] = _mm_mul_ps(_mm_sub_ps(Z[2], Z[0]), oneOverTriArea);
+		Z[3] = _mm_add_ps(_mm_mul_ps(Z[1], _mm_cvtepi32_ps(e[1].stepX)), _mm_mul_ps(Z[2], _mm_cvtepi32_ps(e[2].stepX)));
+		Z[4] = _mm_add_ps(_mm_mul_ps(Z[1], _mm_cvtepi32_ps(e[1].stepY)), _mm_mul_ps(Z[2], _mm_cvtepi32_ps(e[2].stepY)));
 
-		// When we interpolate, beta and gama have already been advanced
-		// by one block, so compensate here.
-		Z[0] = _mm_sub_ps(Z[0], _mm_mul_ps(_mm_cvtepi32_ps(e[1].stepQuad), Z[1]));
-		Z[0] = _mm_sub_ps(Z[0], _mm_mul_ps(_mm_cvtepi32_ps(e[2].stepQuad), Z[2]));
+		// Bounding rectangle
+		__m128i minX = Max(Min(Min(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileStartX));
+		__m128i minY = Max(Min(Min(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(tileStartY));
+		__m128i maxX = Min(Max(Max(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileEndX - 1));
+		__m128i maxY = Min(Max(Max(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(tileEndY - 1));
+
+		// Start in corner of block
+		__m128i minXSnap = _mm_and_si128(minX, _mm_set1_epi32(-BlockSize));
+		__m128i minYSnap = _mm_and_si128(minY, _mm_set1_epi32(-BlockSize));
+		minX = _mm_and_si128(minX, _mm_set1_epi32(-2));
+		minY = _mm_and_si128(minY, _mm_set1_epi32(-2));
 
 		// Sizes
 		__m128i sizeX = _mm_sub_epi32(maxX, minX);
