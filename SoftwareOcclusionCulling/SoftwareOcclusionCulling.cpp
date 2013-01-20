@@ -28,7 +28,6 @@ extern float3 gLightDir;
 extern char *gpDefaultShaderSource;
 
 float gFarClipDistance = 2000.0f;
-int gVisualizeDepthBuffer = 0;
 
 // Handle OnCreation events
 //-----------------------------------------------------------------------------
@@ -144,8 +143,8 @@ void MySample::Create()
 
 	CD3D11_TEXTURE2D_DESC cpuRenderTargetDesc(
             DXGI_FORMAT_R8G8B8A8_UNORM,
-            SCREENW, // TODO: round up to full tile sizes
-            SCREENH,
+            SCREENW * 2, // TODO: round up to full tile sizes
+            SCREENH / 2,
             1, // Array Size
             1, // MIP Levels
 			D3D11_BIND_SHADER_RESOURCE,
@@ -526,7 +525,6 @@ void MySample::HandleCallbackEvent( CPUTEventID Event, CPUTControlID ControlID, 
 		if(state == CPUT_CHECKBOX_CHECKED)
 		{
 			mViewDepthBuffer = true;
-			gVisualizeDepthBuffer = 1;
 			HRESULT hr = mpSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&mpBackBuffer);
 			ASSERT(SUCCEEDED(hr), _L("Failed gettting back buffer"));
 	
@@ -538,7 +536,6 @@ void MySample::HandleCallbackEvent( CPUTEventID Event, CPUTControlID ControlID, 
 			mpBackBuffer->Release();
 			mpRTView->Release();
 			mViewDepthBuffer = false;
-			gVisualizeDepthBuffer = 0;
 		}
 		break;
 	}
@@ -805,7 +802,7 @@ void MySample::Render(double deltaSeconds)
 	if(mViewDepthBuffer)
 	{
 		// Update the GPU-side depth buffer
-		mpContext->UpdateSubresource(mpCPURenderTarget, 0, NULL, mpCPUDepthBuf, SCREENW * 4, 0);
+		mpContext->UpdateSubresource(mpCPURenderTarget, 0, NULL, mpCPUDepthBuf, 2 * SCREENW * 4, 0);
 		mpShowDepthBufMtrl->SetRenderStates(renderParams);
 		mpContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 		mpContext->Draw(3, 0);

@@ -207,8 +207,8 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 	// so to enable the two to have to set bits 6 and 15 which 1000 0000 0100 0000 = 0x8040
 	_mm_setcsr( _mm_getcsr() | 0x8040 );
 
-	__m128i colOffset = _mm_set_epi32(0, 1, 0, 1);
-	__m128i rowOffset = _mm_set_epi32(0, 0, 1, 1);
+	__m128i colOffset = _mm_setr_epi32(0, 1, 0, 1);
+	__m128i rowOffset = _mm_setr_epi32(0, 0, 1, 1);
 
 	__m128i fxptZero = _mm_setzero_si128();
 	float* pDepthBuffer = (float*)pRenderTargetPixels; 
@@ -322,19 +322,9 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 
 			__m128i row, col;
 
-			int rowIdx;
-			// To avoid this branching, choose one method to traverse and store the pixel depth
-			if(gVisualizeDepthBuffer)
-			{
-				// Sequentially traverse and store pixel depths contiguously
-				rowIdx = (startYy * SCREENW + startXx);
-			}
-			else
-			{
-				// Tranverse pixels in 2x2 blocks and store 2x2 pixel quad depths contiguously in memory ==> 2*X
-				// This method provides better perfromance
-				rowIdx = (startYy * SCREENW + 2 * startXx);
-			}
+			// Tranverse pixels in 2x2 blocks and store 2x2 pixel quad depths contiguously in memory ==> 2*X
+			// This method provides better perfromance
+			int rowIdx = (startYy * SCREENW + 2 * startXx);
 
 			col = _mm_add_epi32(colOffset, _mm_set1_epi32(startXx));
 			__m128i aa0Col = _mm_mullo_epi32(aa0, col);
@@ -364,18 +354,8 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 				__m128i beta = _mm_add_epi32(aa1Col, bb1Row);
 				__m128i gama = _mm_add_epi32(aa2Col, bb2Row);
 
-				int idxIncr;
-				if(gVisualizeDepthBuffer)
-				{ 
-					idxIncr = 2;
-				}
-				else
-				{
-					idxIncr = 4;
-				}
-
 				for(int c = startXx; c < endXx; c += 2,
-												idx = idx + idxIncr,
+												idx += 4,
 												alpha = _mm_add_epi32(alpha, aa0Inc),
 												beta  = _mm_add_epi32(beta, aa1Inc),
 												gama  = _mm_add_epi32(gama, aa2Inc))
@@ -394,15 +374,7 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), zz[1]));
 					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), zz[2]));
 
-					__m128 previousDepthValue;
-					if(gVisualizeDepthBuffer)
-					{
-						previousDepthValue = _mm_set_ps(pDepthBuffer[idx], pDepthBuffer[idx + 1], pDepthBuffer[idx + SCREENW], pDepthBuffer[idx + SCREENW + 1]);
-					}
-					else
-					{
-						previousDepthValue = *(__m128*)&pDepthBuffer[idx];
-					}
+					__m128 previousDepthValue = *(__m128*)&pDepthBuffer[idx];
 
 					__m128 depthMask  = _mm_cmpge_ps( depth, previousDepthValue);
 					__m128i finalMask = _mm_and_si128( mask, _mm_castps_si128(depthMask));
