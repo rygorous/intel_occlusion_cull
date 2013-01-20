@@ -292,13 +292,13 @@ static __forceinline void DirectTri(float *pDepthRow, int e0, int e1, int e2, Bl
 
 	for (int y=0; y < h; y += 2, pDepthRow += setup.pitch)
 	{
-		float *pDepth = pDepthRow;
+		float *pDepthEnd = &pDepthRow[w * 2];
 
 		__m128i alph = alphRow;
 		__m128i beta = betaRow;
 		__m128i gama = gamaRow;
 
-		for (int x=0; x < w; x += 2, pDepth += 4)
+		for (float *pDepth = pDepthRow; pDepth < pDepthEnd; pDepth += 4)
 		{
 			// Test pixel inside triangle
 			__m128i mask = _mm_or_si128(_mm_or_si128(alph, beta), gama);
@@ -334,9 +334,9 @@ static __forceinline void PartialBlock(float *pDepth, __m128i e, BlockSetup &set
 	__m128i beta = _mm_add_epi32(_mm_shuffle_epi32(e, 0x55), setup.e[1].offs);
 	__m128i gama = _mm_add_epi32(_mm_shuffle_epi32(e, 0xaa), setup.e[2].offs);
 
-	for (int y=0; y < BlockSize; y += 2, pDepth += setup.pitch - 2*BlockSize)
+	for (int y=0; y < BlockSize; y += 2, pDepth += setup.pitch)
 	{
-		for (int x=0; x < BlockSize; x += 2, pDepth += 4)
+		for (int x=0; x < BlockSize; x += 2)
 		{
 			// Test pixel inside triangle
 			__m128i mask = _mm_or_si128(_mm_or_si128(alph, beta), gama);
@@ -353,11 +353,11 @@ static __forceinline void PartialBlock(float *pDepth, __m128i e, BlockSetup &set
 			depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), setup.z[1]));
 			depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), setup.z[2]));
 
-			__m128 prevDepth = _mm_load_ps(pDepth);
+			__m128 prevDepth = _mm_load_ps(&pDepth[x*2]);
 			__m128 depthMask = _mm_cmpge_ps(depth, prevDepth);
 			__m128 finalMask = _mm_andnot_ps(_mm_castsi128_ps(mask), depthMask);
 			depth = _mm_blendv_ps(prevDepth, depth, finalMask);
-			_mm_store_ps(pDepth, depth);
+			_mm_store_ps(&pDepth[x*2], depth);
 		}
 
 		alph = _mm_add_epi32(alph, setup.e[0].line);
@@ -371,9 +371,9 @@ static __forceinline void SolidBlock(float *pDepth, __m128i e, BlockSetup &setup
 	__m128i beta = _mm_add_epi32(_mm_shuffle_epi32(e, 0x55), setup.e[1].offs);
 	__m128i gama = _mm_add_epi32(_mm_shuffle_epi32(e, 0xaa), setup.e[2].offs);
 
-	for (int y=0; y < BlockSize; y += 2, pDepth += setup.pitch - 2*BlockSize)
+	for (int y=0; y < BlockSize; y += 2, pDepth += setup.pitch)
 	{
-		for (int x=0; x < BlockSize; x += 2, pDepth += 4)
+		for (int x=0; x < BlockSize; x += 2)
 		{
 			beta = _mm_add_epi32(beta, setup.e[1].quad);
 			gama = _mm_add_epi32(gama, setup.e[2].quad);
@@ -383,9 +383,9 @@ static __forceinline void SolidBlock(float *pDepth, __m128i e, BlockSetup &setup
 			depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), setup.z[1]));
 			depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), setup.z[2]));
 
-			__m128 prevDepth = _mm_load_ps(pDepth);
-			__m128 oDepth = _mm_max_ps(prevDepth, depth);
-			_mm_store_ps(pDepth, oDepth);
+			__m128 prevDepth = _mm_load_ps(&pDepth[x*2]);
+			__m128 oDepth = _mm_max_ps(depth, prevDepth);
+			_mm_store_ps(&pDepth[x*2], oDepth);
 		}
 
 		beta = _mm_add_epi32(beta, setup.e[1].line);
@@ -393,12 +393,12 @@ static __forceinline void SolidBlock(float *pDepth, __m128i e, BlockSetup &setup
 	}
 }
 
-static __forceinline void Transpose4x4(__m128i *o, const __m128i &i0, const __m128i &i1, const __m128i &i2, const __m128i &i3)
+static __forceinline void Transpose4x3(__m128i *o, const __m128i &i0, const __m128i &i1, const __m128i &i2)
 {
 	__m128i a0 = _mm_unpacklo_epi32(i0, i2); // i00 i20 i01 i21
-	__m128i a1 = _mm_unpacklo_epi32(i1, i3); // i10 i30 i11 i31
+	__m128i a1 = _mm_unpacklo_epi32(i1, i1); // i10 xxx i11 xxx
 	__m128i a2 = _mm_unpackhi_epi32(i0, i2); // i02 i22 i03 i23
-	__m128i a3 = _mm_unpackhi_epi32(i1, i3); // i12 i32 i13 i33
+	__m128i a3 = _mm_unpackhi_epi32(i1, i1); // i12 xxx i13 xxx
 
 	o[0] = _mm_unpacklo_epi32(a0, a1); // i00 i10 i20 i30
 	o[1] = _mm_unpackhi_epi32(a0, a1); // i01 i11 i21 i31
@@ -550,10 +550,9 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 		// Edges again (batch-transpose!)
 		__m128i edgenmin[4], edgenmax[4], edgeoffs[4], edgecbmax[4], edgestepx[4], edgestepy[4];
 
-		__m128i zero = _mm_setzero_si128();
 		if (!_mm_testc_si128(sizeBig, _mm_set1_epi32(-1))) // any small?
 		{
-			Transpose4x4(edgeoffs, e[0].getOffs(minX, minY), e[1].getOffs(minX, minY), e[2].getOffs(minX, minY), zero);
+			Transpose4x3(edgeoffs, e[0].getOffs(minX, minY), e[1].getOffs(minX, minY), e[2].getOffs(minX, minY));
 		}
 
 		if (!_mm_testz_si128(sizeBig, sizeBig)) // any big?
@@ -561,11 +560,11 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			__m128i cb0 = _mm_sub_epi32(e[0].getOffs(minXSnap, minYSnap), e[0].nmax);
 			__m128i cb1 = _mm_sub_epi32(e[1].getOffs(minXSnap, minYSnap), e[1].nmax);
 			__m128i cb2 = _mm_sub_epi32(e[2].getOffs(minXSnap, minYSnap), e[2].nmax);
-			Transpose4x4(edgenmin, e[0].nmin, e[1].nmin, e[2].nmin, zero);
-			Transpose4x4(edgenmax, e[0].nmax, e[1].nmax, e[2].nmax, zero);
-			Transpose4x4(edgecbmax, cb0, cb1, cb2, zero);
-			Transpose4x4(edgestepx, e[0].stepX, e[1].stepX, e[2].stepX, zero);
-			Transpose4x4(edgestepy, e[0].stepY, e[1].stepY, e[2].stepY, zero);
+			Transpose4x3(edgenmin, e[0].nmin, e[1].nmin, e[2].nmin);
+			Transpose4x3(edgenmax, e[0].nmax, e[1].nmax, e[2].nmax);
+			Transpose4x3(edgecbmax, cb0, cb1, cb2);
+			Transpose4x3(edgestepx, e[0].stepX, e[1].stepX, e[2].stepX);
+			Transpose4x3(edgestepy, e[0].stepY, e[1].stepY, e[2].stepY);
 		}
 
         // Now we have 4 triangles set up.  Rasterize them each individually.
