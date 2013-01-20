@@ -1,0 +1,9 @@
+bin
+obj
+*.vcxproj.user
+*.opensdf
+*.sdf
+*.exe
+*.ilk
+*.pdb
+
