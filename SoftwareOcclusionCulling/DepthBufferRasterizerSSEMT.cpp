@@ -414,6 +414,11 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 
 	float* pDepthBuffer = (float*)mpRenderTargetPixels;
 
+	static const int BLOCKW = (TILE_WIDTH_IN_PIXELS + BlockSize-1) / BlockSize;
+	static const int BLOCKH = (TILE_HEIGHT_IN_PIXELS + BlockSize-1) / BlockSize;
+	float blockMinZ[BLOCKW*BLOCKH];
+	memset(blockMinZ, 0, sizeof(blockMinZ));
+
 	// Based on TaskId determine which tile to process
 	UINT screenWidthInTiles = SCREENW/TILE_WIDTH_IN_PIXELS;
     UINT tileX = taskId % screenWidthInTiles;
@@ -424,6 +429,9 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 	
 	int tileStartY = tileY * TILE_HEIGHT_IN_PIXELS;
 	int tileEndY   = min(tileStartY + TILE_HEIGHT_IN_PIXELS - 1, SCREENH - 1);
+
+	if (tileEndX > SCREENW-1) tileEndX = SCREENW-1;
+	if (tileEndY > SCREENH-1) tileEndY = SCREENH-1;
 
 	UINT bin = 0;
 	UINT binIndex = 0;
@@ -521,6 +529,10 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 		Z[3] = _mm_add_ps(_mm_mul_ps(Z[1], _mm_cvtepi32_ps(e[1].stepX)), _mm_mul_ps(Z[2], _mm_cvtepi32_ps(e[2].stepX)));
 		Z[4] = _mm_add_ps(_mm_mul_ps(Z[1], _mm_cvtepi32_ps(e[1].stepY)), _mm_mul_ps(Z[2], _mm_cvtepi32_ps(e[2].stepY)));
 
+		__m128 zerof = _mm_setzero_ps();
+		__m128 Znmin = _mm_mul_ps(_mm_add_ps(_mm_min_ps(Z[3], zerof), _mm_min_ps(Z[4], zerof)), _mm_set1_ps(BlockSize - 1.0f));
+		__m128 Znmax = _mm_mul_ps(_mm_add_ps(_mm_max_ps(Z[3], zerof), _mm_max_ps(Z[4], zerof)), _mm_set1_ps(BlockSize - 1.0f));
+
 		// Bounding rectangle
 		__m128i minX = Max(Min(Min(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileStartX));
 		__m128i minY = Max(Min(Min(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(tileStartY));
@@ -536,7 +548,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 		// Sizes
 		__m128i sizeX = _mm_sub_epi32(maxX, minX);
 		__m128i sizeY = _mm_sub_epi32(maxY, minY);
-		__m128i sizeMin = _mm_min_epi32(sizeX, sizeY);
+		__m128i sizeMin = _mm_max_epi32(sizeX, sizeY);
 		__m128i sizeBig = _mm_cmpgt_epi32(sizeMin, _mm_set1_epi32(2*BlockSize));
 
 		// Edges again (batch-transpose!)
@@ -598,26 +610,40 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 				// Loop through block rows
 				for (int y0 = ly0; y0 <= ly1; y0 += BlockSize)
 				{
+					float *pMinZ = &blockMinZ[((y0 - tileStartY) >> BlockLog2) * BLOCKW + ((lx0 - tileStartX) >> BlockLog2)];
+
 					__m128i cbmax = cbmaxr;
-					for (int x0 = lx0; x0 <= lx1; x0 += BlockSize)
+					for (int x0 = lx0; x0 <= lx1; x0 += BlockSize, cbmax = _mm_add_epi32(cbmax, ex), pMinZ++)
 				__m128i alpha = _mm_sub_epi32(_mm_sub_epi32(sum, beta), gama);
 					{
-						if (_mm_testz_si128(cbmax, sign))
+						if (!_mm_testz_si128(cbmax, sign))
+							continue;
+
+						// Okay, this block is in. Render it.
+						float *pDepth = &pDepthRow[x0 * 2];
+
+						// Accept whole block when fully covered
+						__m128i cbmin = _mm_add_epi32(cbmax, endiff);
+						__m128i cb = _mm_add_epi32(cbmax, enmax);
+
+						// Block base Z
+						float z0 = Z[0].m128_f32[lane] + cb.m128i_i32[1] * Z[1].m128_f32[lane] + cb.m128i_i32[2] * Z[2].m128_f32[lane];
+
+						// Z trivial reject test
+						float zmax = z0 + Znmax.m128_f32[lane];
+						if (*pMinZ > zmax)
+							continue;
+
+						if (_mm_testz_si128(cbmin, sign))
 						{
-							// Okay, this block is in. Render it.
-							float *pDepth = &pDepthRow[x0 * 2];
+							float zmin = z0 + Znmin.m128_f32[lane];
+							if (zmin > *pMinZ)
+								*pMinZ = zmin;
 
-							// Accept whole block when fully covered
-							__m128i cbmin = _mm_add_epi32(cbmax, endiff);
-							__m128i cb = _mm_add_epi32(cbmax, enmax);
-
-							//if (_mm_testz_si128(cbmin, sign))
-							//	SolidBlock(pDepth, cb, block);
-							//else
-								PartialBlock(pDepth, cb, block);
+							SolidBlock(pDepth, cb, block);
 						}
-
-						cbmax = _mm_add_epi32(cbmax, ex);
+						else
+							PartialBlock(pDepth, cb, block);
 					}
 
 					cbmaxr = _mm_add_epi32(cbmaxr, ey);
