@@ -325,6 +325,11 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 		Z[1] = _mm_mul_ps(_mm_sub_ps(xformedvPos[1].Z, xformedvPos[0].Z), oneOverTriArea);
 		Z[2] = _mm_mul_ps(_mm_sub_ps(xformedvPos[2].Z, xformedvPos[0].Z), oneOverTriArea);
 
+		// When we interpolate, beta and gama have already been advanced
+		// by one block, so compensate here.
+		Z[0] = _mm_sub_ps(Z[0], _mm_mul_ps(_mm_cvtepi32_ps(_mm_slli_epi32(A1, 1)), Z[1]));
+		Z[0] = _mm_sub_ps(Z[0], _mm_mul_ps(_mm_cvtepi32_ps(_mm_slli_epi32(A2, 1)), Z[2]));
+
 		// Use bounding box traversal strategy to determine which pixels to rasterize 
 		__m128i startX = _mm_and_si128(Max(Min(Min(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileStartX)), _mm_set1_epi32(0xFFFFFFFE));
 		__m128i endX   = Min(_mm_add_epi32(Max(Max(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(1)), _mm_set1_epi32(tileEndX));
@@ -364,11 +369,6 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			__m128i aa1Inc = _mm_slli_epi32(aa1, 1);
 			__m128i aa2Inc = _mm_slli_epi32(aa2, 1);
 
-			// When we interpolate, beta and gama have already been advanced
-			// by one block, so compensate here.
-			zz[0] = _mm_sub_ps(zz[0], _mm_mul_ps(_mm_cvtepi32_ps(aa1Inc), zz[1]));
-			zz[0] = _mm_sub_ps(zz[0], _mm_mul_ps(_mm_cvtepi32_ps(aa2Inc), zz[2]));
-
 			__m128i row, col;
 
 			// Traverse pixels in 2x2 blocks and store 2x2 pixel quad depths contiguously in memory ==> 2*X
@@ -391,7 +391,6 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			__m128i bb2Inc = _mm_slli_epi32(bb2, 1);
 
 			for(int r = startYy; r < endYy; r += 2,
-											row  = _mm_add_epi32(row, _mm_set1_epi32(2)),
 											rowIdx = rowIdx + 2 * SCREENW,
 											bb0Row = _mm_add_epi32(bb0Row, bb0Inc),
 											bb1Row = _mm_add_epi32(bb1Row, bb1Inc),
