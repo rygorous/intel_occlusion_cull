@@ -134,10 +134,10 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
     UINT tileY = tileId / screenWidthInTiles;
 
     int tileStartX = tileX * TILE_WIDTH_IN_PIXELS;
-	int tileEndX   = tileStartX + TILE_WIDTH_IN_PIXELS;
+	int tileEndX   = tileStartX + TILE_WIDTH_IN_PIXELS - 1;
 	
 	int tileStartY = tileY * TILE_HEIGHT_IN_PIXELS;
-	int tileEndY   = tileStartY + TILE_HEIGHT_IN_PIXELS;
+	int tileEndY   = tileStartY + TILE_HEIGHT_IN_PIXELS - 1;
 
 	UINT bin = 0;
 	UINT binIndex = 0;
@@ -229,10 +229,10 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
 
 		// Use bounding box traversal strategy to determine which pixels to rasterize 
 		__m128i startX = _mm_and_si128(Max(Min(Min(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileStartX)), _mm_set1_epi32(0xFFFFFFFE));
-		__m128i endX   = Min(_mm_add_epi32(Max(Max(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(1)), _mm_set1_epi32(tileEndX));
+		__m128i endX   = Min(Max(Max(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileEndX));
 
 		__m128i startY = _mm_and_si128(Max(Min(Min(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(tileStartY)), _mm_set1_epi32(0xFFFFFFFE));
-		__m128i endY   = Min(_mm_add_epi32(Max(Max(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(1)), _mm_set1_epi32(tileEndY));
+		__m128i endY   = Min(Max(Max(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(tileEndY));
 
 		// Now we have 4 triangles set up.  Rasterize them each individually.
         for(int lane=0; lane < numSimdTris; lane++)
@@ -269,7 +269,7 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
 			// Traverse pixels in 2x2 blocks and store 2x2 pixel quad depths contiguously in memory ==> 2*X
 			// This method provides better perfromance
 			int rowIdx = (startYy * SCREENW + 2 * startXx);
-			int rowSamples = (endXx - startXx) * 2;
+			int rowSamples = (endXx - startXx + 1) * 2;
 
 			col = _mm_add_epi32(colOffset, _mm_set1_epi32(startXx));
 			__m128i aa1Col = _mm_mullo_epi32(aa1, col);
@@ -283,7 +283,7 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
 			__m128i bb2Inc = _mm_slli_epi32(bb2, 1);
 
 			// Incrementally compute Fab(x, y) for all the pixels inside the bounding box formed by (startX, endX) and (startY, endY)
-			for(int r = startYy; r < endYy; r += 2,
+			for(int r = startYy; r <= endYy; r += 2,
 											row  = _mm_add_epi32(row, _mm_set1_epi32(2)),
 											rowIdx = rowIdx + 2 * SCREENW,
 											bb1Row = _mm_add_epi32(bb1Row, bb1Inc),
