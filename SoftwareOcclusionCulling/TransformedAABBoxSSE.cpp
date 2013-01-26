@@ -228,23 +228,20 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 
 		// Fab(x, y) =     Ax       +       By     +      C              = 0
 		// Fab(x, y) = (ya - yb)x   +   (xb - xa)y + (xa * yb - xb * ya) = 0
-		// Compute A = (ya - yb) for the 3 line segments that make up each triangle
-		__m128i A0 = _mm_sub_epi32(fixY[1], fixY[2]);
+		// Compute A = (ya - yb) for 2 of the 3 line segments that make up each triangle
 		__m128i A1 = _mm_sub_epi32(fixY[2], fixY[0]);
 		__m128i A2 = _mm_sub_epi32(fixY[0], fixY[1]);
 
-		// Compute B = (xb - xa) for the 3 line segments that make up each triangle
-		__m128i B0 = _mm_sub_epi32(fixX[2], fixX[1]);
+		// Compute B = (xb - xa) for 2 of the 3 line segments that make up each triangle
 		__m128i B1 = _mm_sub_epi32(fixX[0], fixX[2]);
 		__m128i B2 = _mm_sub_epi32(fixX[1], fixX[0]);
 
-		// Compute C = (xa * yb - xb * ya) for the 3 line segments that make up each triangle
-		__m128i C0 = _mm_sub_epi32(_mm_mullo_epi32(fixX[1], fixY[2]), _mm_mullo_epi32(fixX[2], fixY[1]));
+		// Compute C = (xa * yb - xb * ya) for 2 of the 3 line segments that make up each triangle
 		__m128i C1 = _mm_sub_epi32(_mm_mullo_epi32(fixX[2], fixY[0]), _mm_mullo_epi32(fixX[0], fixY[2]));
 		__m128i C2 = _mm_sub_epi32(_mm_mullo_epi32(fixX[0], fixY[1]), _mm_mullo_epi32(fixX[1], fixY[0]));
 
 		// Compute triangle area
-		__m128i triArea = _mm_add_epi32(_mm_add_epi32(C0, C1), C2);
+		__m128i triArea = _mm_sub_epi32(_mm_mullo_epi32(B2, A1), _mm_mullo_epi32(B1, A2));
 		__m128 oneOverTriArea = _mm_div_ps(_mm_set1_ps(1.0f), _mm_cvtepi32_ps(triArea));
 
 		// Z setup
@@ -253,12 +250,17 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 		Z[1] = _mm_mul_ps(_mm_sub_ps(xformedPos[1].Z, xformedPos[0].Z), oneOverTriArea);
 		Z[2] = _mm_mul_ps(_mm_sub_ps(xformedPos[2].Z, xformedPos[0].Z), oneOverTriArea);
 
+		// When we interpolate, beta and gama have already been advanced
+		// by one block, so compensate here.
+		Z[0] = _mm_sub_ps(Z[0], _mm_mul_ps(_mm_cvtepi32_ps(_mm_slli_epi32(A1, 1)), Z[1]));
+		Z[0] = _mm_sub_ps(Z[0], _mm_mul_ps(_mm_cvtepi32_ps(_mm_slli_epi32(A2, 1)), Z[2]));
+
 		// Use bounding box traversal strategy to determine which pixels to rasterize 
 		__m128i startX = _mm_and_si128(Max(Min(Min(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(0)), _mm_set1_epi32(0xFFFFFFFE));
-		__m128i endX   = Min(_mm_add_epi32(Max(Max(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(1)), _mm_set1_epi32(SCREENW));
+		__m128i endX   = Min(Max(Max(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(SCREENW-1));
 
 		__m128i startY = _mm_and_si128(Max(Min(Min(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(0)), _mm_set1_epi32(0xFFFFFFFE));
-		__m128i endY   = Min(_mm_add_epi32(Max(Max(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(1)), _mm_set1_epi32(SCREENH));
+		__m128i endY   = Min(Max(Max(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(SCREENH-1));
 
 		for(int vv = 0; vv < 3; vv++) 
 		{
@@ -298,68 +300,58 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 			int startYy = startY.m128i_i32[lane];
 			int endYy	= endY.m128i_i32[lane];
 		
-			__m128i aa0 = _mm_set1_epi32(A0.m128i_i32[lane]);
+			__m128i sum = _mm_set1_epi32(triArea.m128i_i32[lane]);
+
 			__m128i aa1 = _mm_set1_epi32(A1.m128i_i32[lane]);
 			__m128i aa2 = _mm_set1_epi32(A2.m128i_i32[lane]);
 
-			__m128i bb0 = _mm_set1_epi32(B0.m128i_i32[lane]);
 			__m128i bb1 = _mm_set1_epi32(B1.m128i_i32[lane]);
 			__m128i bb2 = _mm_set1_epi32(B2.m128i_i32[lane]);
 
-			__m128i cc0 = _mm_set1_epi32(C0.m128i_i32[lane]);
 			__m128i cc1 = _mm_set1_epi32(C1.m128i_i32[lane]);
 			__m128i cc2 = _mm_set1_epi32(C2.m128i_i32[lane]);
 
-			__m128i aa0Inc = _mm_slli_epi32(aa0, 1);
 			__m128i aa1Inc = _mm_slli_epi32(aa1, 1);
 			__m128i aa2Inc = _mm_slli_epi32(aa2, 1);
-
-			// When we interpolate, beta and gama have already been advanced
-			// by one block, so compensate here.
-			zz[0] = _mm_sub_ps(zz[0], _mm_mul_ps(_mm_cvtepi32_ps(aa1Inc), zz[1]));
-			zz[0] = _mm_sub_ps(zz[0], _mm_mul_ps(_mm_cvtepi32_ps(aa2Inc), zz[2]));
+			__m128i aa0Dec = _mm_add_epi32(aa1Inc, aa2Inc);
 
 			__m128i row, col;
 
 			// Traverse pixels in 2x2 blocks and store 2x2 pixel quad depths contiguously in memory ==> 2*X
 			// This method provides better perfromance
 			int rowIdx = (startYy * SCREENW + 2 * startXx);
-			int rowSamples = (endXx - startXx) * 2;
+			int rowSamples = (endXx - startXx + 1) * 2;
 
 			col = _mm_add_epi32(colOffset, _mm_set1_epi32(startXx));
-			__m128i aa0Col = _mm_mullo_epi32(aa0, col);
 			__m128i aa1Col = _mm_mullo_epi32(aa1, col);
 			__m128i aa2Col = _mm_mullo_epi32(aa2, col);
 
 			row = _mm_add_epi32(rowOffset, _mm_set1_epi32(startYy));
-			__m128i bb0Row = _mm_add_epi32(_mm_mullo_epi32(bb0, row), cc0);
 			__m128i bb1Row = _mm_add_epi32(_mm_mullo_epi32(bb1, row), cc1);
 			__m128i bb2Row = _mm_add_epi32(_mm_mullo_epi32(bb2, row), cc2);
 
-			__m128i bb0Inc = _mm_slli_epi32(bb0, 1);
 			__m128i bb1Inc = _mm_slli_epi32(bb1, 1);
 			__m128i bb2Inc = _mm_slli_epi32(bb2, 1);
 
 			// Incrementally compute Fab(x, y) for all the pixels inside the bounding box formed by (startX, endX) and (startY, endY)
-			for(int r = startYy; r < endYy; r += 2,
-											row  = _mm_add_epi32(row, _mm_set1_epi32(2)),
+			for(int r = startYy; r <= endYy; r += 2,
+									 		row  = _mm_add_epi32(row, _mm_set1_epi32(2)),
 											rowIdx = rowIdx + 2 * SCREENW,
-											bb0Row = _mm_add_epi32(bb0Row, bb0Inc),
 											bb1Row = _mm_add_epi32(bb1Row, bb1Inc),
 											bb2Row = _mm_add_epi32(bb2Row, bb2Inc))
 			{
 				// Compute barycentric coordinates 
 				float *pDepthStart = &pDepthBuffer[rowIdx];
 				float *pDepthEnd = pDepthStart + rowSamples;
-				__m128i alpha = _mm_add_epi32(aa0Col, bb0Row);
 				__m128i beta = _mm_add_epi32(aa1Col, bb1Row);
 				__m128i gama = _mm_add_epi32(aa2Col, bb2Row);
+				__m128i alpha = _mm_sub_epi32(_mm_sub_epi32(sum, beta), gama);
 
 				for(float *pDepth = pDepthStart; pDepth < pDepthEnd; pDepth += 4)
 				{
 					//Test Pixel inside triangle
 					__m128i mask = _mm_or_si128(_mm_or_si128(alpha, beta), gama);
-					alpha = _mm_add_epi32(alpha, aa0Inc);
+					alpha = _mm_sub_epi32(alpha, aa0Dec);
 					beta  = _mm_add_epi32(beta, aa1Inc);
 					gama  = _mm_add_epi32(gama, aa2Inc);
 
