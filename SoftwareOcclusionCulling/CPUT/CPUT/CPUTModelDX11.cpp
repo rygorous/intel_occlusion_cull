@@ -58,10 +58,12 @@ void CPUTModelDX11::SetRenderStates(CPUTRenderParameters &renderParams)
         float      *pCameraPos = (float*)&pCamera->GetPosition();
         XMVECTOR    cameraPos = XMLoadFloat3(&XMFLOAT3( pCameraPos[0], pCameraPos[1], pCameraPos[2] ));
 
+		XMMATRIX    viewproj = view * projection;
+
         pCb = (CPUTModelConstantBuffer*)mapInfo.pData;
         pCb->World               = world;
-        pCb->ViewProjection      = view  *projection;
-        pCb->WorldViewProjection = world  *pCb->ViewProjection;
+        pCb->ViewProjection      = viewproj;
+        pCb->WorldViewProjection = world * viewproj;
         pCb->InverseWorld        = XMMatrixInverse(&determinant, XMMatrixTranspose(world));
         // pCb->LightDirection      = XMVector3Transform(gLightDir, pCb->InverseWorld );
         // pCb->EyePosition         = XMVector3Transform(cameraPos, pCb->InverseWorld );
