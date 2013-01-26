@@ -384,9 +384,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			__m128i bb2Inc = _mm_slli_epi32(bb2, 1);
 
 			for(int r = startYy; r <= endYy; r += 2,
-											rowIdx = rowIdx + 2 * SCREENW,
-											bb1Row = _mm_add_epi32(bb1Row, bb1Inc),
-											bb2Row = _mm_add_epi32(bb2Row, bb2Inc))
+											rowIdx = rowIdx + 2 * SCREENW)
 			{
 				// Compute barycentric coordinates 
 				float *pDepthStart = &pDepthBuffer[rowIdx];
@@ -394,6 +392,9 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 				__m128i beta = _mm_add_epi32(aa1Col, bb1Row);
 				__m128i gama = _mm_add_epi32(aa2Col, bb2Row);
 				__m128i alpha = _mm_sub_epi32(_mm_sub_epi32(sum, beta), gama);
+
+				bb1Row = _mm_add_epi32(bb1Row, bb1Inc);
+				bb2Row = _mm_add_epi32(bb2Row, bb2Inc);
 
 				for(float *pDepth = pDepthStart; pDepth < pDepthEnd; pDepth += 4)
 				{
@@ -414,12 +415,10 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), zz[1]));
 					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), zz[2]));
 
-					__m128 previousDepthValue = *(__m128*)pDepth;
-
-					__m128 depthMask = _mm_cmpge_ps(depth, previousDepthValue);
-					__m128 finalMask = _mm_andnot_ps(_mm_castsi128_ps(mask), depthMask);
-										
-					depth = _mm_blendv_ps(previousDepthValue, depth, finalMask);
+					// Update depth buffer
+					__m128 previousDepthValue = _mm_load_ps(pDepth);
+					depth = _mm_max_ps(depth, previousDepthValue);
+					depth = _mm_blendv_ps(depth, previousDepthValue, _mm_castsi128_ps(mask));
 					_mm_store_ps(pDepth, depth);
 				}//for each column											
 			}// for each row
