@@ -19,36 +19,19 @@
 CPUTConfigEntry  &CPUTConfigEntry::sNullConfigValue = CPUTConfigEntry(_L(""), _L(""));
 
 //----------------------------------------------------------------
-void RemoveWhitespace(cString &szString)
+static bool iswhite(int ch)
 {
-    // Remove leading whitespace
-    size_t nFirstIndex = szString.find_first_not_of(_L(' '));
-    if(nFirstIndex != cString::npos)
-    {
-        szString = szString.substr(nFirstIndex);
-    }
+	return ch == _L(' ') || ch == _L('\t') || ch == _L('\n');
+}
 
-    // Remove trailing newlines
-    size_t nLastIndex = szString.find_last_not_of(_L('\n'));
-    while(nLastIndex != szString.length()-1)
-    {
-        szString.erase(nLastIndex+1,1);
-        nLastIndex = szString.find_last_not_of(_L('\n'));
-    };
-    // Tabs
-    nLastIndex = szString.find_last_not_of(_L('\t'));
-    while(nLastIndex != szString.length()-1)
-    {
-        szString.erase(nLastIndex+1,1);
-        nLastIndex = szString.find_last_not_of(_L('\t'));
-    };
-    // Spaces
-    nLastIndex = szString.find_last_not_of(_L(' '));
-    while(nLastIndex != szString.length()-1)
-    {
-        szString.erase(nLastIndex+1,1);
-        nLastIndex = szString.find_last_not_of(_L(' '));
-    };
+template<typename T>
+void RemoveWhitespace(T &start, T &end)
+{
+	while (start < end && iswhite(*start))
+		++start;
+
+	while (end > start && iswhite(*(end - 1)))
+		--end;
 }
 
 //----------------------------------------------------------------
@@ -66,8 +49,13 @@ CPUTResult ReadLine(cString &szString, FILE *pFile)
         }
     }
 
-    szString = szCurrLine;
-    RemoveWhitespace(szString);
+	// Strip whitespace
+	TCHAR *start = szCurrLine;
+	TCHAR *end = start + wcslen(start);
+	RemoveWhitespace(start, end);
+
+	*end = 0;
+	szString = start;
 
     // TODO: why are we checking feof twice in this loop?
     // And, why are we using an error code to signify done?
@@ -240,8 +228,7 @@ CPUTResult CPUTConfigFile::LoadFile(const cString &szFilename)
         if(nOpenBracketIndex != cString::npos && nCloseBracketIndex != cString::npos)
         {   // This line is a valid block header
             pCurrBlock = mpBlocks + nCurrBlock++;
-            szCurrLine.erase(nCloseBracketIndex,1);
-            pCurrBlock->mszName = szCurrLine.c_str()+1;
+			pCurrBlock->mszName = szCurrLine.substr(nOpenBracketIndex + 1, nCloseBracketIndex - nOpenBracketIndex - 1);
             /*
             size_t nSpaceIndex = szCurrLine.find_first_of(_L(' '));
             cString szValue = szCurrLine.substr(nSpaceIndex+1); 
@@ -281,16 +268,22 @@ CPUTResult CPUTConfigFile::LoadFile(const cString &szFilename)
             }
             else
             {
-                cString szValue = szCurrLine.substr(nEqualsIndex+1);
-                cString szName = szCurrLine.erase(nEqualsIndex, 1024);
-                RemoveWhitespace(szValue);
-                RemoveWhitespace(szName);
-                std::transform(szName.begin(), szName.end(), szName.begin(), ::tolower);
+				cString::iterator valStart = szCurrLine.begin() + nEqualsIndex + 1;
+				cString::iterator valEnd = szCurrLine.end();
+				cString::iterator nameStart = szCurrLine.begin();
+				cString::iterator nameEnd = nameStart + nEqualsIndex;
+
+				RemoveWhitespace(valStart, valEnd);
+				RemoveWhitespace(nameStart, nameEnd);
+				std::transform(nameStart, nameEnd, nameStart, ::tolower);
+
+				size_t namePos = nameStart - szCurrLine.begin();
+				size_t nameLen = nameEnd - nameStart;
 
                 bool dup = false;
                 for(int ii=0;ii<pCurrBlock->mnValueCount;++ii)
                 {
-                    if(!pCurrBlock->mpValues[ii].szName.compare(szName))
+                    if(!pCurrBlock->mpValues[ii].szName.compare(0, cString::npos, szCurrLine, namePos, nameLen))
                     {
                         dup = true;
                         break;
@@ -298,8 +291,8 @@ CPUTResult CPUTConfigFile::LoadFile(const cString &szFilename)
                 }
                 if(!dup)
                 {
-                    pCurrBlock->mpValues[pCurrBlock->mnValueCount].szValue = szValue;
-                    pCurrBlock->mpValues[pCurrBlock->mnValueCount].szName = szName;
+                    pCurrBlock->mpValues[pCurrBlock->mnValueCount].szValue.assign(valStart, valEnd);
+                    pCurrBlock->mpValues[pCurrBlock->mnValueCount].szName.assign(nameStart, nameEnd);
                     pCurrBlock->mnValueCount++;
                 }
             }
