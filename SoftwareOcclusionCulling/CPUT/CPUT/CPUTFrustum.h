@@ -24,8 +24,10 @@ class CPUTCamera;
 class CPUTFrustum
 {
 public:
+	float4 mPlane[6];
     float3 mpPosition[8];
     float3 mpNormal[6];
+	float mPlaneDist[6];
 
     UINT mNumFrustumVisibleModels;
     UINT mNumFrustumCulledModels;

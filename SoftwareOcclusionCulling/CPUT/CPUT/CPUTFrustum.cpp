@@ -100,6 +100,15 @@ void CPUTFrustum::InitializeFrustum
     mpNormal[3] = cross3(farBottom,   bottomRight).normalize(); // bottom
     mpNormal[4] = cross3(bottomRight, farRight).normalize();    // right
     mpNormal[5] = cross3(farRight,    farBottom).normalize();   // far clip plane
+
+	for (int i=0; i < 6; i++)
+	{
+		mPlaneDist[i] = dot3(mpNormal[i], mpPosition[(i < 3) ? 0 : 6]);
+		mPlane[i].x = mpNormal[i].x;
+		mPlane[i].y = mpNormal[i].y;
+		mPlane[i].z = mpNormal[i].z;
+		mPlane[i].w = -mPlaneDist[i];
+	}
 }
 
 //-----------------------------------------------
@@ -107,51 +116,24 @@ bool CPUTFrustum::IsVisible(
     const float3 &center,
     const float3 &half
 ){
-    // TODO:  There are MUCH more efficient ways to do this.
-    float3 pBoundingBoxPosition[8];
-    pBoundingBoxPosition[0] = center + float3(  half.x,  half.y,  half.z );
-    pBoundingBoxPosition[1] = center + float3(  half.x,  half.y, -half.z );
-    pBoundingBoxPosition[2] = center + float3(  half.x, -half.y,  half.z );
-    pBoundingBoxPosition[3] = center + float3(  half.x, -half.y, -half.z );
-    pBoundingBoxPosition[4] = center + float3( -half.x,  half.y,  half.z );
-    pBoundingBoxPosition[5] = center + float3( -half.x,  half.y, -half.z );
-    pBoundingBoxPosition[6] = center + float3( -half.x, -half.y,  half.z );
-    pBoundingBoxPosition[7] = center + float3( -half.x, -half.y, -half.z );
-
-    // Test each bounding box point against each of the six frustum planes.
-    // Note: we need a point on the plane to compute the distance to the plane.
-    // We only need two of our frustum's points to do this.  A corner vertex is on
-    // three of the six planes.  We need two of these corners to have a point
-    // on all six planes.
-    UINT pPointIndex[6] = {0,0,0,6,6,6};
+    // Test the bounding box against each of the six frustum planes.
     UINT ii;
     for( ii=0; ii<6; ii++ )
     {
         bool allEightPointsOutsidePlane = true;
-        float3 *pNormal = &mpNormal[ii];
-        float3 *pPlanePoint = &mpPosition[pPointIndex[ii]];
-        float3 planeToPoint;
-        float distanceToPlane;
-        UINT jj;
-        for( jj=0; jj<8; jj++ )
-        {
-            planeToPoint = pBoundingBoxPosition[jj] - *pPlanePoint;
-            distanceToPlane = dot3( *pNormal, planeToPoint );
-            if( distanceToPlane < 0.0f )
-            {
-                allEightPointsOutsidePlane = false;
-                break; // from for.  No point testing any more points against this plane.
-            }
-        }
-        if( allEightPointsOutsidePlane )
-        {
+		float4 *pPlane = &mPlane[ii];
+
+		float centerDist = dot3( mpNormal[ii], center ) - mPlaneDist[ii];
+		float projectedExtent = fabsf( mpNormal[ii].x * half.x ) + fabsf( mpNormal[ii].y * half.y ) + fabsf( mpNormal[ii].z * half.z );
+		if (centerDist - projectedExtent >= 0.0f ) // Box is completely outside plane
+		{
             mNumFrustumCulledModels++;
             return false;
         }
     }
 
-    // Tested all eight points against all six planes and none of the planes
-    // had all eight points outside.
+    // Tested box against all six planes and none of the planes
+    // had the full box outside.
     mNumFrustumVisibleModels++;
     return true;
 }
