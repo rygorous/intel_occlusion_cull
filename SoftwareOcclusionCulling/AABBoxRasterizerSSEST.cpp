@@ -36,7 +36,7 @@ void AABBoxRasterizerSSEST::IsInsideViewFrustum(CPUTCamera *pCamera)
 	mpCamera = pCamera;
 	for(UINT i = 0; i < mNumModels; i++)
 	{
-		mpTransformedAABBox[i].IsInsideViewFrustum(mpCamera);
+		mpInsideViewFrustum[i] = mpTransformedAABBox[i].IsInsideViewFrustum(mpCamera);
 	}
 }
 
@@ -51,16 +51,20 @@ void AABBoxRasterizerSSEST::TransformAABBoxAndDepthTest()
 	mDepthTestTimer.StartTimer();
 
 	__m128 xformedPos[AABB_VERTICES];
+	__m128 cumulativeMatrix[4];
 	BoxTestSetup setup;
 	setup.Init(mViewMatrix, mProjMatrix, mpCamera, mOccludeeSizeThreshold);
 
 	for(UINT i = 0; i < mNumModels; i++)
 	{
 		mpVisible[i] = false;
+		if(!mpInsideViewFrustum[i])
+			continue;
 	
-		if(mpTransformedAABBox[i].IsInsideViewFrustum() && !mpTransformedAABBox[i].IsTooSmall(setup))
+		mpTransformedAABBox[i].MakeCumulativeMatrix(cumulativeMatrix, setup);	
+		if(!mpTransformedAABBox[i].IsTooSmall(setup, cumulativeMatrix))
 		{
-			mpTransformedAABBox[i].TransformAABBox(xformedPos);
+			mpTransformedAABBox[i].TransformAABBox(xformedPos, cumulativeMatrix);
 			mpVisible[i] = mpTransformedAABBox[i].RasterizeAndDepthTestAABBox(mpRenderTargetPixels, xformedPos);
 		}		
 	}

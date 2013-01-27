@@ -25,7 +25,7 @@ HelperSSE::~HelperSSE()
 {
 }
 
-__m128 HelperSSE::TransformCoords(__m128 *v, __m128 *m)
+__m128 HelperSSE::TransformCoords(const __m128 *v, const __m128 *m)
 {
 	__m128 vResult = _mm_shuffle_ps(*v, *v, _MM_SHUFFLE(0,0,0,0));
     vResult = _mm_mul_ps(vResult, m[0]);

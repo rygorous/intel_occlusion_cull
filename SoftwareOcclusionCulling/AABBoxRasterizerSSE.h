@@ -40,7 +40,7 @@ class AABBoxRasterizerSSE : public AABBoxRasterizer
 		{
 			for(UINT i = 0; i < mNumModels; i++)
 			{
-				mpTransformedAABBox[i].SetInsideViewFrustum(true);
+				mpInsideViewFrustum[i] = true;
 			}
 		}
 
@@ -94,6 +94,7 @@ class AABBoxRasterizerSSE : public AABBoxRasterizer
 		__m128 *mProjMatrix;
 		UINT *mpRenderTargetPixels;
 		CPUTCamera *mpCamera;
+		bool *mpInsideViewFrustum;
 		bool *mpVisible;
 		UINT mNumCulled;
 		UINT mNumDepthTestTasks;

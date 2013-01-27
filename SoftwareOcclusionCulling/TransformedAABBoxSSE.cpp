@@ -61,15 +61,12 @@ void BoxTestSetup::Init(__m128 viewMatrix[4], __m128 projMatrix[4], CPUTCamera *
 }
 
 TransformedAABBoxSSE::TransformedAABBoxSSE()
-	: mpCPUTModel(NULL),
-	  mInsideViewFrustum(true)
+	: mpCPUTModel(NULL)
 {
-	mCumulativeMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16); 
 }
 
 TransformedAABBoxSSE::~TransformedAABBoxSSE()
 {
-	_aligned_free(mCumulativeMatrix);
 }
 
 //--------------------------------------------------------------------------
@@ -88,15 +85,15 @@ void TransformedAABBoxSSE::CreateAABBVertexIndexList(CPUTModelDX11 *pModel)
 //----------------------------------------------------------------
 // Determine is model is inside view frustum
 //----------------------------------------------------------------
-void TransformedAABBoxSSE::IsInsideViewFrustum(CPUTCamera *pCamera)
+bool TransformedAABBoxSSE::IsInsideViewFrustum(CPUTCamera *pCamera)
 {
-	mInsideViewFrustum = pCamera->mFrustum.IsVisible(mpCPUTModel->mBoundingBoxCenterWorldSpace, mpCPUTModel->mBoundingBoxHalfWorldSpace);
+	return pCamera->mFrustum.IsVisible(mpCPUTModel->mBoundingBoxCenterWorldSpace, mpCPUTModel->mBoundingBoxHalfWorldSpace);
 }
 
 //----------------------------------------------------------------------------
-// Determine if the occluddee size is too small and if so avoid drawing it
+// Determines the cumulative transform matrix
 //----------------------------------------------------------------------------
-bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup)
+void TransformedAABBoxSSE::MakeCumulativeMatrix(__m128 cumulativeMatrix[4], const BoxTestSetup &setup)
 {
 	float* world = (float*)mpCPUTModel->GetWorldMatrix();
 
@@ -106,10 +103,16 @@ bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup)
 	worldMatrix[2] = _mm_loadu_ps(world + 8);
 	worldMatrix[3] = _mm_loadu_ps(world + 12);
 
-	MatrixMultiply(worldMatrix, setup.mViewProjViewport, mCumulativeMatrix);
+	MatrixMultiply(worldMatrix, setup.mViewProjViewport, cumulativeMatrix);
+}
 
+//----------------------------------------------------------------------------
+// Determine if the occluddee size is too small and if so avoid drawing it
+//----------------------------------------------------------------------------
+bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup, const __m128 cumulativeMatrix[4])
+{
 	__m128 center = _mm_set_ps(1.0f, mBBCenter.z, mBBCenter.y, mBBCenter.x);
-	__m128 mBBCenterOSxForm = TransformCoords(&center, mCumulativeMatrix);
+	__m128 mBBCenterOSxForm = TransformCoords(&center, cumulativeMatrix);
     float w = mBBCenterOSxForm.m128_f32[3];
 	if( w > 1.0f )
 	{
@@ -121,7 +124,7 @@ bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup)
 //----------------------------------------------------------------
 // Trasforms the AABB vertices to screen space once every frame
 //----------------------------------------------------------------
-void TransformedAABBoxSSE::TransformAABBox(__m128 *pXformedPos)
+void TransformedAABBoxSSE::TransformAABBox(__m128 *pXformedPos, const __m128 cumulativeMatrix[4])
 {
 	const float3 &bbCenter = mpCPUTModel->mBoundingBoxCenterObjectSpace;
 	const float3 &bbHalf   = mpCPUTModel->mBoundingBoxHalfObjectSpace;
@@ -147,7 +150,7 @@ void TransformedAABBoxSSE::TransformAABBox(__m128 *pXformedPos)
 		__m128 mixConst = _mm_load_ps((const float *) mixVert[i]);
 		__m128 vertex = _mm_blendv_ps(minVert, maxVert, mixConst);
 
-		pXformedPos[i] = TransformCoords(&vertex, mCumulativeMatrix);
+		pXformedPos[i] = TransformCoords(&vertex, cumulativeMatrix);
 		float oneOverW = 1.0f/max(pXformedPos[i].m128_f32[3], 0.0000001f);
 		pXformedPos[i] = pXformedPos[i] * oneOverW;
 		pXformedPos[i].m128_f32[3] = oneOverW;

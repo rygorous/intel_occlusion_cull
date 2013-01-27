@@ -41,7 +41,7 @@ class HelperSSE
 			__m128i W;
 		};
 
-		static __m128 TransformCoords(__m128 *v, __m128 *m);
+		static __m128 TransformCoords(const __m128 *v, const __m128 *m);
 		static void MatrixMultiply(const __m128 *m1, const __m128 *m2, __m128 *result);
 
 		static __forceinline __m128i Min(const __m128i &v0, const __m128i &v1)

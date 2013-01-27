@@ -37,22 +37,17 @@ class TransformedAABBoxSSE : public HelperSSE
 		TransformedAABBoxSSE();
 		~TransformedAABBoxSSE();
 		void CreateAABBVertexIndexList(CPUTModelDX11 *pModel);
-		void IsInsideViewFrustum(CPUTCamera *pCamera);
+		bool IsInsideViewFrustum(CPUTCamera *pCamera);
 		void TransformAABBoxAndDepthTest();
 
-		bool IsTooSmall(const BoxTestSetup &setup);
-
-		void TransformAABBox(__m128 *pXformedPos);
+		void MakeCumulativeMatrix(__m128 cumulativeMatrix[4], const BoxTestSetup &setup);
+		bool IsTooSmall(const BoxTestSetup &setup, const __m128 cumulativeMatrix[4]);
+		void TransformAABBox(__m128 *pXformedPos, const __m128 cumulativeMatrix[4]);
 
 		bool RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels, const __m128 *pXformedPos); // returns if visible
 
-		inline void SetInsideViewFrustum(bool insideVF){mInsideViewFrustum = insideVF;}
-		inline bool IsInsideViewFrustum(){ return mInsideViewFrustum;}
-
 	private:
 		CPUTModelDX11 *mpCPUTModel;
-		__m128 *mCumulativeMatrix; 
-		bool    mInsideViewFrustum;
 
 		float3 mBBCenter;
 		float  mRadiusSq;
