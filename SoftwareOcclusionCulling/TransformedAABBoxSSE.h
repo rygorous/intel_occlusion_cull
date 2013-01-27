@@ -49,6 +49,9 @@ class TransformedAABBoxSSE : public HelperSSE
 	private:
 		CPUTModelDX11 *mpCPUTModel;
 
+		float3 mBBWorldCenter;
+		float3 mBBWorldHalf;
+
 		float3 mBBCenter;
 		float  mRadiusSq;
 

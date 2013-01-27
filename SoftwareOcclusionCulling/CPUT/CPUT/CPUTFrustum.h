@@ -18,6 +18,7 @@
 
 #include "CPUT.h"
 #include "CPUTMath.h"
+#include <xmmintrin.h>
 
 class CPUTCamera;
 
@@ -27,16 +28,13 @@ public:
     float3 mpPosition[8];
     float3 mpNormal[6];
 
-	float mPlaneX[8];
-	float mPlaneY[8];
-	float mPlaneZ[8];
-	float mPlaneW[8];
+	float *mPlanes;
 
     UINT mNumFrustumVisibleModels;
     UINT mNumFrustumCulledModels;
 
-    CPUTFrustum(){}
-    ~CPUTFrustum(){}
+    CPUTFrustum();
+    ~CPUTFrustum();
 
     void InitializeFrustum
     (

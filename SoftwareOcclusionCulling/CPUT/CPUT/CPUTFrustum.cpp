@@ -17,6 +17,18 @@
 #include "CPUTCamera.h"
 
 //-----------------------------------------------
+CPUTFrustum::CPUTFrustum()
+{
+	mPlanes = (float *) _aligned_malloc(4 * 2 * sizeof(__m128), sizeof(__m128));
+}
+
+//-----------------------------------------------
+CPUTFrustum::~CPUTFrustum()
+{
+	_aligned_free(mPlanes);
+}
+
+//-----------------------------------------------
 void CPUTFrustum::InitializeFrustum( CPUTCamera *pCamera )
 {
     InitializeFrustum(
@@ -103,18 +115,18 @@ void CPUTFrustum::InitializeFrustum
 
 	for (int i=0; i < 6; i++)
 	{
-		mPlaneX[i] = mpNormal[i].x;
-		mPlaneY[i] = mpNormal[i].y;
-		mPlaneZ[i] = mpNormal[i].z;
-		mPlaneW[i] = -dot3(mpNormal[i], mpPosition[(i < 3) ? 0 : 6]);
+		mPlanes[0*8 + i] = mpNormal[i].x;
+		mPlanes[1*8 + i] = mpNormal[i].y;
+		mPlanes[2*8 + i] = mpNormal[i].z;
+		mPlanes[3*8 + i] = -dot3(mpNormal[i], mpPosition[(i < 3) ? 0 : 6]);
 	}
 
 	for (int i=6; i < 8; i++)
 	{
-		mPlaneX[i] = 0;
-		mPlaneY[i] = 0;
-		mPlaneZ[i] = 0;
-		mPlaneW[i] = -1.0f;
+		mPlanes[0*8 + i] = 0;
+		mPlanes[1*8 + i] = 0;
+		mPlanes[2*8 + i] = 0;
+		mPlanes[3*8 + i] = -1.0f;
 	}
 }
 
@@ -137,10 +149,10 @@ bool CPUTFrustum::IsVisible(
 	// Test the bounding box against 4 planes at a time
 	for( ii=0; ii<2; ii++ )
 	{
-		__m128 planesX	= _mm_loadu_ps( &mPlaneX[ii * 4] );
-		__m128 planesY	= _mm_loadu_ps( &mPlaneY[ii * 4] );
-		__m128 planesZ	= _mm_loadu_ps( &mPlaneZ[ii * 4] );
-		__m128 planesW	= _mm_loadu_ps( &mPlaneW[ii * 4] );
+		__m128 planesX	= _mm_load_ps( &mPlanes[0 * 8 + ii * 4] );
+		__m128 planesY	= _mm_load_ps( &mPlanes[1 * 8 + ii * 4] );
+		__m128 planesZ	= _mm_load_ps( &mPlanes[2 * 8 + ii * 4] );
+		__m128 planesW	= _mm_load_ps( &mPlanes[3 * 8 + ii * 4] );
 
 		// Sign for half[XYZ] so that dot product with plane normal would be maximal
 		__m128 halfXSgn	= _mm_xor_ps( halfX, _mm_and_ps( planesX, signMask ) );

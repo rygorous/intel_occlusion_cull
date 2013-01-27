@@ -53,10 +53,11 @@ void TransformedMeshSSE::TransformVertices(__m128 *cumulativeMatrix,
 	UINT i;
 	for(i = start; i <= end; i++)
 	{
-		mpXformedPos[i] = TransformCoords(&mpVertices[i].position, cumulativeMatrix);
-		float oneOverW = 1.0f/max(mpXformedPos[i].m128_f32[3], 0.0000001f);
-		mpXformedPos[i] = _mm_mul_ps(mpXformedPos[i], _mm_set1_ps(oneOverW));
-		mpXformedPos[i].m128_f32[3] = oneOverW;
+		__m128 xformed = TransformCoords(&mpVertices[i].position, cumulativeMatrix);
+		__m128 clampedW = _mm_max_ps(_mm_set1_ps(0.0000001f), _mm_shuffle_ps(xformed, xformed, 0xff));
+		__m128 oneOverW = _mm_div_ps(_mm_set1_ps(1.0f), clampedW);
+		__m128 xformWith1 = _mm_insert_ps(xformed, _mm_set1_ps(1.0f), 0x30);
+		mpXformedPos[i] = _mm_mul_ps(xformWith1, oneOverW);
 	}
 }
 
