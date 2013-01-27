@@ -43,11 +43,11 @@ protected:
 
     UINT           mMeshCount;
     bool           mIsRenderable;
-    float3         mBoundingBoxCenterObjectSpace;
-    float3         mBoundingBoxHalfObjectSpace;
     CPUTMaterial  *mpBoundingBoxMaterial;
 
 public:
+    float3         mBoundingBoxCenterObjectSpace;
+    float3         mBoundingBoxHalfObjectSpace;
     float3         mBoundingBoxCenterWorldSpace;
     float3         mBoundingBoxHalfWorldSpace;
 

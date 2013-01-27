@@ -64,15 +64,11 @@ TransformedAABBoxSSE::TransformedAABBoxSSE()
 	: mpCPUTModel(NULL),
 	  mInsideViewFrustum(true)
 {
-	mWorldMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
-	mpBBVertexList = (__m128*)_aligned_malloc(sizeof(float) * 4 * AABB_VERTICES, 16);
 	mCumulativeMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16); 
 }
 
 TransformedAABBoxSSE::~TransformedAABBoxSSE()
 {
-	_aligned_free(mWorldMatrix);
-	_aligned_free(mpBBVertexList);
 	_aligned_free(mCumulativeMatrix);
 }
 
@@ -83,30 +79,10 @@ TransformedAABBoxSSE::~TransformedAABBoxSSE()
 void TransformedAABBoxSSE::CreateAABBVertexIndexList(CPUTModelDX11 *pModel)
 {
 	mpCPUTModel = pModel;
-	float* world = (float*)pModel->GetWorldMatrix();
-
-	mWorldMatrix[0] = _mm_loadu_ps(world + 0);
-	mWorldMatrix[1] = _mm_loadu_ps(world + 4);
-	mWorldMatrix[2] = _mm_loadu_ps(world + 8);
-	mWorldMatrix[3] = _mm_loadu_ps(world + 12);
 
 	float3 bbHalf;
 	pModel->GetBoundsObjectSpace(&mBBCenter, &bbHalf);
-	mRadiusSq = bbHalf.lengthSq();
-
-	float3 min = mBBCenter - bbHalf;
-	float3 max = mBBCenter + bbHalf;
-	
-	//Top 4 vertices in BB
-	mpBBVertexList[0] = _mm_set_ps(1.0f, max.z, max.y, max.x);
-	mpBBVertexList[1] = _mm_set_ps(1.0f, max.z, max.y, min.x); 
-	mpBBVertexList[2] = _mm_set_ps(1.0f, min.z, max.y, min.x);
-	mpBBVertexList[3] = _mm_set_ps(1.0f, min.z, max.y, max.x);
-	// Bottom 4 vertices in BB
-	mpBBVertexList[4] = _mm_set_ps(1.0f, min.z, min.y, max.x);
-	mpBBVertexList[5] = _mm_set_ps(1.0f, max.z, min.y, max.x);
-	mpBBVertexList[6] = _mm_set_ps(1.0f, max.z, min.y, min.x);
-	mpBBVertexList[7] = _mm_set_ps(1.0f, min.z, min.y, min.x);
+	mRadiusSq = pModel->mBoundingBoxHalfObjectSpace.lengthSq();
 }
 
 //----------------------------------------------------------------
@@ -122,7 +98,15 @@ void TransformedAABBoxSSE::IsInsideViewFrustum(CPUTCamera *pCamera)
 //----------------------------------------------------------------------------
 bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup)
 {
-	MatrixMultiply(mWorldMatrix, setup.mViewProjViewport, mCumulativeMatrix);
+	float* world = (float*)mpCPUTModel->GetWorldMatrix();
+
+	__m128 worldMatrix[4];
+	worldMatrix[0] = _mm_loadu_ps(world + 0);
+	worldMatrix[1] = _mm_loadu_ps(world + 4);
+	worldMatrix[2] = _mm_loadu_ps(world + 8);
+	worldMatrix[3] = _mm_loadu_ps(world + 12);
+
+	MatrixMultiply(worldMatrix, setup.mViewProjViewport, mCumulativeMatrix);
 
 	__m128 center = _mm_set_ps(1.0f, mBBCenter.z, mBBCenter.y, mBBCenter.x);
 	__m128 mBBCenterOSxForm = TransformCoords(&center, mCumulativeMatrix);
@@ -139,9 +123,31 @@ bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup)
 //----------------------------------------------------------------
 void TransformedAABBoxSSE::TransformAABBox(__m128 *pXformedPos)
 {
+	const float3 &bbCenter = mpCPUTModel->mBoundingBoxCenterObjectSpace;
+	const float3 &bbHalf   = mpCPUTModel->mBoundingBoxHalfObjectSpace;
+
+	static const __declspec(align(16)) unsigned int mixVert[8][4] = {
+		//Top 4 vertices in BB
+		{ ~0, ~0, ~0, 0 },
+		{  0, ~0, ~0, 0 },
+		{  0, ~0,  0, 0 },
+		{ ~0, ~0,  0, 0 },
+		// Bottom 4 vertices in BB
+		{ ~0,  0,  0, 0 },
+		{ ~0,  0, ~0, 0 },
+		{  0,  0, ~0, 0 },
+		{  0,  0,  0, 0 },
+	};
+
+	__m128 minVert = _mm_setr_ps(bbCenter.x - bbHalf.x, bbCenter.y - bbHalf.y, bbCenter.z - bbHalf.z, 1.0f);
+	__m128 maxVert = _mm_setr_ps(bbCenter.x + bbHalf.x, bbCenter.y + bbHalf.y, bbCenter.z + bbHalf.z, 1.0f);
+
 	for(UINT i = 0; i < AABB_VERTICES; i++)
 	{
-		pXformedPos[i] = TransformCoords(&mpBBVertexList[i], mCumulativeMatrix);
+		__m128 mixConst = _mm_load_ps((const float *) mixVert[i]);
+		__m128 vertex = _mm_blendv_ps(minVert, maxVert, mixConst);
+
+		pXformedPos[i] = TransformCoords(&vertex, mCumulativeMatrix);
 		float oneOverW = 1.0f/max(pXformedPos[i].m128_f32[3], 0.0000001f);
 		pXformedPos[i] = pXformedPos[i] * oneOverW;
 		pXformedPos[i].m128_f32[3] = oneOverW;

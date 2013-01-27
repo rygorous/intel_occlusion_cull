@@ -51,8 +51,6 @@ class TransformedAABBoxSSE : public HelperSSE
 
 	private:
 		CPUTModelDX11 *mpCPUTModel;
-		__m128 *mWorldMatrix;
-		__m128 *mpBBVertexList;
 		__m128 *mCumulativeMatrix; 
 		bool    mInsideViewFrustum;
 
