@@ -501,24 +501,21 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 		__m128i maxX = Min(Max(Max(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileEndX));
 		__m128i maxY = Min(Max(Max(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(tileEndY));
 
-		// Start in corner of block
-		__m128i minXSnap = _mm_and_si128(minX, _mm_set1_epi32(-BlockSize));
-		__m128i minYSnap = _mm_and_si128(minY, _mm_set1_epi32(-BlockSize));
-		minX = _mm_and_si128(minX, _mm_set1_epi32(-2));
-		minY = _mm_and_si128(minY, _mm_set1_epi32(-2));
-
 		// Sizes
 		__m128i sizeX = _mm_sub_epi32(maxX, minX);
 		__m128i sizeY = _mm_sub_epi32(maxY, minY);
 		__m128i sizeMin = _mm_min_epi32(sizeX, sizeY);
 		__m128i sizeBig = _mm_cmpgt_epi32(sizeMin, _mm_set1_epi32(2*BlockSize));
 
+		// Align minX/Y corner - big tris are block aligned, small tris are 2x2 aligned
+		__m128i coordAlign = _mm_blendv_epi8(_mm_set1_epi32(-2), _mm_set1_epi32(-BlockSize), sizeBig);
+		minX = _mm_and_si128(minX, coordAlign);
+		minY = _mm_and_si128(minY, coordAlign);
+
 		// Edges again (batch-transpose!)
 		__m128i edgenmax[4], edgeoffs[4], edgestepx[4], edgestepy[4];
 
-		__m128i whichX = _mm_blendv_epi8(minX, minXSnap, sizeBig);
-		__m128i whichY = _mm_blendv_epi8(minY, minYSnap, sizeBig);
-		Transpose4x3(edgeoffs, e[0].getOffs(whichX, whichY), e[1].getOffs(whichX, whichY), e[2].getOffs(whichX, whichY));
+		Transpose4x3(edgeoffs, e[0].getOffs(minX, minY), e[1].getOffs(minX, minY), e[2].getOffs(minX, minY));
 
 		if (!_mm_testz_si128(sizeBig, sizeBig)) // any big?
 		{
@@ -549,9 +546,6 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			}
 			else
 			{
-				lx0 = minXSnap.m128i_i32[lane];
-				ly0 = minYSnap.m128i_i32[lane];
-
 				// Prepare for block traversal
 				__m128i sign = _mm_set1_epi32(0x80000000);
 				__m128i enmax = edgenmax[lane];
