@@ -53,7 +53,6 @@ TransformedAABBoxSSE::TransformedAABBoxSSE()
 {
 	mWorldMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
 	mpBBVertexList = (__m128*)_aligned_malloc(sizeof(float) * 4 * AABB_VERTICES, 16);
-	mpXformedPos =  (__m128*)_aligned_malloc(sizeof(float) * 4 * AABB_VERTICES, 16);
 	mViewPortMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
 	mCumulativeMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16); 
 
@@ -67,7 +66,6 @@ TransformedAABBoxSSE::~TransformedAABBoxSSE()
 {
 	_aligned_free(mWorldMatrix);
 	_aligned_free(mpBBVertexList);
-	_aligned_free(mpXformedPos);
 	_aligned_free(mViewPortMatrix);
 	_aligned_free(mCumulativeMatrix);
 }
@@ -145,28 +143,28 @@ bool TransformedAABBoxSSE::IsTooSmall(__m128 *pViewMatrix, __m128 *pProjMatrix, 
 //----------------------------------------------------------------
 // Trasforms the AABB vertices to screen space once every frame
 //----------------------------------------------------------------
-void TransformedAABBoxSSE::TransformAABBox()
+void TransformedAABBoxSSE::TransformAABBox(__m128 *pXformedPos)
 {
 	for(UINT i = 0; i < AABB_VERTICES; i++)
 	{
-		mpXformedPos[i] = TransformCoords(&mpBBVertexList[i], mCumulativeMatrix);
-		float oneOverW = 1.0f/max(mpXformedPos[i].m128_f32[3], 0.0000001f);
-		mpXformedPos[i] = mpXformedPos[i] * oneOverW;
-		mpXformedPos[i].m128_f32[3] = oneOverW;
+		pXformedPos[i] = TransformCoords(&mpBBVertexList[i], mCumulativeMatrix);
+		float oneOverW = 1.0f/max(pXformedPos[i].m128_f32[3], 0.0000001f);
+		pXformedPos[i] = pXformedPos[i] * oneOverW;
+		pXformedPos[i].m128_f32[3] = oneOverW;
 	}
 }
 
-void TransformedAABBoxSSE::Gather(vFloat4 pOut[3], UINT triId)
+void TransformedAABBoxSSE::Gather(vFloat4 pOut[3], UINT triId, const __m128 *pXformedPos)
 {
 	for(int lane = 0; lane < SSE; lane++)
 	{
 		for(int i = 0; i < 3; i++)
 		{
 			UINT index = sBBIndexList[(triId * 3) + (lane * 3) + i];
-			pOut[i].X.m128_f32[lane] = mpXformedPos[index].m128_f32[0];
-			pOut[i].Y.m128_f32[lane] = mpXformedPos[index].m128_f32[1];
-			pOut[i].Z.m128_f32[lane] = mpXformedPos[index].m128_f32[2];
-			pOut[i].W.m128_f32[lane] = mpXformedPos[index].m128_f32[3];
+			pOut[i].X.m128_f32[lane] = pXformedPos[index].m128_f32[0];
+			pOut[i].Y.m128_f32[lane] = pXformedPos[index].m128_f32[1];
+			pOut[i].Z.m128_f32[lane] = pXformedPos[index].m128_f32[2];
+			pOut[i].W.m128_f32[lane] = pXformedPos[index].m128_f32[3];
 		}
 	}
 }
@@ -176,7 +174,7 @@ void TransformedAABBoxSSE::Gather(vFloat4 pOut[3], UINT triId)
 // If any of the rasterized AABB pixels passes the depth test exit early and mark the occludee
 // as visible. If all rasterized AABB pixels are occluded then the occludee is culled
 //-----------------------------------------------------------------------------------------
-void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels)
+void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels, const __m128 *pXformedPos)
 {
 	// Set DAZ and FZ MXCSR bits to flush denormals to zero (i.e., make it faster)
 	// Denormal are zero (DAZ) is bit 6 and Flush to zero (FZ) is bit 15. 
@@ -192,7 +190,7 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 	for(UINT i = 0; i < AABB_TRIANGLES; i += SSE)
 	{
 		vFloat4 xformedPos[3];
-		Gather(xformedPos, i);
+		Gather(xformedPos, i, pXformedPos);
 
 		// use fixed-point only for X and Y.  Avoid work for Z and W.
 		__m128i fixX[3], fixY[3];

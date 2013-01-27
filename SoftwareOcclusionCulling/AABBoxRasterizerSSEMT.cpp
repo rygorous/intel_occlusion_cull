@@ -124,6 +124,8 @@ void AABBoxRasterizerSSEMT::TransformAABBoxAndDepthTest(UINT taskId)
 		end   = start +  numModelsPerTask2;
 	}
 
+	__m128 xformedPos[AABB_VERTICES];
+
 	for(UINT i = start; i < end; i++)
 	{
 		mpVisible[i] = false;
@@ -131,8 +133,8 @@ void AABBoxRasterizerSSEMT::TransformAABBoxAndDepthTest(UINT taskId)
 		
 		if(mpTransformedAABBox[i].IsInsideViewFrustum() && !mpTransformedAABBox[i].IsTooSmall(mViewMatrix, mProjMatrix, mpCamera))
 		{
-			mpTransformedAABBox[i].TransformAABBox();
-			mpTransformedAABBox[i].RasterizeAndDepthTestAABBox(mpRenderTargetPixels);
+			mpTransformedAABBox[i].TransformAABBox(xformedPos);
+			mpTransformedAABBox[i].RasterizeAndDepthTestAABBox(mpRenderTargetPixels, xformedPos);
 		}
 	}
 }
