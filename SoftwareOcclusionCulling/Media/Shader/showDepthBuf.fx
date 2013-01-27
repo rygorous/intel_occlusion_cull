@@ -13,7 +13,7 @@ float4 PSMain(float4 pos : SV_Position) : SV_Target
 		int inY = (int) pos.y;
 
 		// perform swizzle
-#if 0
+#if 1
 		int x = (inX & 1) + ((inY & 1) << 1) + ((inX & ~1) << 1);
 		int y = inY >> 1;
 #else

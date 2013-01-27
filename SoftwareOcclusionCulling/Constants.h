@@ -70,7 +70,7 @@ const int AVG_COUNTER = 10;
 
 // ---- Block size specific
 
-#if 0
+#if 1
 
 const int SWIZ_SIZE = 2;
 
