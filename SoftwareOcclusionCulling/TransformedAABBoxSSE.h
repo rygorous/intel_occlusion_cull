@@ -49,7 +49,6 @@ class TransformedAABBoxSSE : public HelperSSE
 		__m128 *mpBBVertexList;
 		__m128 *mpXformedPos;
 		__m128 *mCumulativeMatrix; 
-		UINT	mBBIndexList[AABB_INDICES];
 		bool   *mVisible;
 		bool    mInsideViewFrustum;
 		float   mOccludeeSizeThreshold;

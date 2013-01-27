@@ -17,6 +17,33 @@
 
 #include "TransformedAABBoxSSE.h"
 
+static const UINT sBBIndexList[AABB_INDICES] =
+{
+	// index for top 
+	1, 3, 2,
+	0, 3, 1,
+
+	// index for bottom
+	5, 7, 4,
+	6, 7, 5,
+
+	// index for left
+	1, 7, 6,
+	2, 7, 1,
+
+	// index for right
+	3, 5, 4,
+	0, 5, 3,
+
+	// index for back
+	2, 4, 7,
+	3, 4, 2,
+
+	// index for front
+	0, 6, 5,
+	1, 6, 0,
+};
+
 TransformedAABBoxSSE::TransformedAABBoxSSE()
 	: mpCPUTModel(NULL),
 	  mVisible(NULL),
@@ -75,54 +102,6 @@ void TransformedAABBoxSSE::CreateAABBVertexIndexList(CPUTModelDX11 *pModel)
 	mpBBVertexList[5] = _mm_set_ps(1.0f, max.z, min.y, max.x);
 	mpBBVertexList[6] = _mm_set_ps(1.0f, max.z, min.y, min.x);
 	mpBBVertexList[7] = _mm_set_ps(1.0f, min.z, min.y, min.x);
-
-	// index for top 
-	mBBIndexList[0]  = 1;
-	mBBIndexList[1]  = 3;
-	mBBIndexList[2]  = 2;
-	mBBIndexList[3]  = 0;
-	mBBIndexList[4]  = 3;
-	mBBIndexList[5]  = 1;
-
-	// index for bottom
-	mBBIndexList[6]  = 5;
-	mBBIndexList[7]  = 7;
-	mBBIndexList[8]  = 4;
-	mBBIndexList[9]  = 6;
-	mBBIndexList[10] = 7;
-	mBBIndexList[11] = 5;
-
-	// index for left
-	mBBIndexList[12] = 1;
-	mBBIndexList[13] = 7;
-	mBBIndexList[14] = 6;
-	mBBIndexList[15] = 2;
-	mBBIndexList[16] = 7;
-	mBBIndexList[17] = 1;
-
-	// index for right
-	mBBIndexList[18] = 3;
-	mBBIndexList[19] = 5;
-	mBBIndexList[20] = 4;
-	mBBIndexList[21] = 0;
-	mBBIndexList[22] = 5;
-	mBBIndexList[23] = 3;
-
-	// index for back
-	mBBIndexList[24] = 2;
-	mBBIndexList[25] = 4;
-	mBBIndexList[26] = 7;
-	mBBIndexList[27] = 3;
-	mBBIndexList[28] = 4;
-	mBBIndexList[29] = 2;
-
-	// index for front
-	mBBIndexList[30] = 0;
-	mBBIndexList[31] = 6;
-	mBBIndexList[32] = 5;
-	mBBIndexList[33] = 1;
-	mBBIndexList[34] = 6;
-	mBBIndexList[35] = 0;
 }
 
 //----------------------------------------------------------------
@@ -184,7 +163,7 @@ void TransformedAABBoxSSE::Gather(vFloat4 pOut[3], UINT triId)
 	{
 		for(int i = 0; i < 3; i++)
 		{
-			UINT index = mBBIndexList[(triId * 3) + (lane * 3) + i];
+			UINT index = sBBIndexList[(triId * 3) + (lane * 3) + i];
 			pOut[i].X.m128_f32[lane] = mpXformedPos[index].m128_f32[0];
 			pOut[i].Y.m128_f32[lane] = mpXformedPos[index].m128_f32[1];
 			pOut[i].Z.m128_f32[lane] = mpXformedPos[index].m128_f32[2];
