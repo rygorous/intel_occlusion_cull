@@ -403,12 +403,6 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 					alpha = _mm_sub_epi32(alpha, aa0Dec);
 					beta  = _mm_add_epi32(beta, aa1Inc);
 					gama  = _mm_add_epi32(gama, aa2Inc);
-
-					// Early out if all of this quad's pixels are outside the triangle.
-					if(_mm_testc_si128(mask, _mm_set1_epi32(0x80000000)))
-					{
-						continue;
-					}
 					
 					// Compute barycentric-interpolated depth
 			        __m128 depth = zz[0];
