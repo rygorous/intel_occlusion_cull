@@ -62,9 +62,7 @@ void BoxTestSetup::Init(__m128 viewMatrix[4], __m128 projMatrix[4], CPUTCamera *
 
 TransformedAABBoxSSE::TransformedAABBoxSSE()
 	: mpCPUTModel(NULL),
-	  mVisible(NULL),
-	  mInsideViewFrustum(true),
-	  mTooSmall(false)
+	  mInsideViewFrustum(true)
 {
 	mWorldMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
 	mpBBVertexList = (__m128*)_aligned_malloc(sizeof(float) * 4 * AABB_VERTICES, 16);
@@ -123,7 +121,6 @@ void TransformedAABBoxSSE::IsInsideViewFrustum(CPUTCamera *pCamera)
 bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup)
 {
 	float radius = mBBHalf.lengthSq(); // Use length-squared to avoid sqrt().  Relative comparissons hold.
-	mTooSmall = false;
 
 	MatrixMultiply(mWorldMatrix, setup.mViewProjViewport, mCumulativeMatrix);
 
@@ -132,13 +129,9 @@ bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup)
     float w = mBBCenterOSxForm.m128_f32[3];
 	if( w > 1.0f )
 	{
-		mTooSmall = radius < w * setup.radiusThreshold ?  true : false;
+		return radius < w * setup.radiusThreshold;
 	}
-	else
-	{
-		mTooSmall = false;
-	}
-	return mTooSmall;
+	return false;
 }
 
 //----------------------------------------------------------------
@@ -175,7 +168,7 @@ void TransformedAABBoxSSE::Gather(vFloat4 pOut[3], UINT triId, const __m128 *pXf
 // If any of the rasterized AABB pixels passes the depth test exit early and mark the occludee
 // as visible. If all rasterized AABB pixels are occluded then the occludee is culled
 //-----------------------------------------------------------------------------------------
-void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels, const __m128 *pXformedPos)
+bool TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels, const __m128 *pXformedPos)
 {
 	// Set DAZ and FZ MXCSR bits to flush denormals to zero (i.e., make it faster)
 	// Denormal are zero (DAZ) is bit 6 and Flush to zero (FZ) is bit 15. 
@@ -249,8 +242,7 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 			if(!_mm_test_all_zeros(*(__m128i*)&nearClipMask, *(__m128i*)&nearClipMask))
 			{
                 // All four vertices are behind the near plane (we're processing four triangles at a time w/ SSE)
-                *mVisible = true;
-                return;
+                return true;
 			}
 		}
 
@@ -347,11 +339,12 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 					__m128i finalMask = _mm_andnot_si128( mask, _mm_castps_si128(depthMask));
 					if(!_mm_test_all_zeros(finalMask, finalMask))
 					{
-						*mVisible = true;
-						return; //early exit
+						return true; // early exit
 					}
 				}//for each column											
 			}// for each row
 		}// for each triangle
 	}// for each set of SIMD# triangles
+
+	return false;
 }

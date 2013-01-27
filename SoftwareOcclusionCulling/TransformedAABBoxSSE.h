@@ -44,20 +44,17 @@ class TransformedAABBoxSSE : public HelperSSE
 
 		void TransformAABBox(__m128 *pXformedPos);
 
-		void RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels, const __m128 *pXformedPos);
+		bool RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels, const __m128 *pXformedPos); // returns if visible
 
 		inline void SetInsideViewFrustum(bool insideVF){mInsideViewFrustum = insideVF;}
 		inline bool IsInsideViewFrustum(){ return mInsideViewFrustum;}
-		inline void SetVisible(bool *visible){mVisible = visible;}
 
 	private:
 		CPUTModelDX11 *mpCPUTModel;
 		__m128 *mWorldMatrix;
 		__m128 *mpBBVertexList;
 		__m128 *mCumulativeMatrix; 
-		bool   *mVisible;
 		bool    mInsideViewFrustum;
-		bool    mTooSmall;
 
 		float3 mBBCenter;
 		float3 mBBHalf;

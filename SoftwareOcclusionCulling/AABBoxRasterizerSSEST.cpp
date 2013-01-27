@@ -57,12 +57,11 @@ void AABBoxRasterizerSSEST::TransformAABBoxAndDepthTest()
 	for(UINT i = 0; i < mNumModels; i++)
 	{
 		mpVisible[i] = false;
-		mpTransformedAABBox[i].SetVisible(&mpVisible[i]);
 	
 		if(mpTransformedAABBox[i].IsInsideViewFrustum() && !mpTransformedAABBox[i].IsTooSmall(setup))
 		{
 			mpTransformedAABBox[i].TransformAABBox(xformedPos);
-			mpTransformedAABBox[i].RasterizeAndDepthTestAABBox(mpRenderTargetPixels, xformedPos);
+			mpVisible[i] = mpTransformedAABBox[i].RasterizeAndDepthTestAABBox(mpRenderTargetPixels, xformedPos);
 		}		
 	}
 	mDepthTestTime[mTimeCounter++] = mDepthTestTimer.StopTimer();
