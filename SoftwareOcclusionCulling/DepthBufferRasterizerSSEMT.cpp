@@ -513,16 +513,8 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 		minY = _mm_and_si128(minY, coordAlign);
 
 		// Edges again (batch-transpose!)
-		__m128i edgenmax[4], edgeoffs[4], edgestepx[4], edgestepy[4];
-
+		__m128i edgeoffs[4];
 		Transpose4x3(edgeoffs, e[0].getOffs(minX, minY), e[1].getOffs(minX, minY), e[2].getOffs(minX, minY));
-
-		if (!_mm_testz_si128(sizeBig, sizeBig)) // any big?
-		{
-			Transpose4x3(edgenmax, e[0].nmax, e[1].nmax, e[2].nmax);
-			Transpose4x3(edgestepx, e[0].stepX, e[1].stepX, e[2].stepX);
-			Transpose4x3(edgestepy, e[0].stepY, e[1].stepY, e[2].stepY);
-		}
 
         // Now we have 4 triangles set up.  Rasterize them each individually.
         for(int lane=0; lane < numSimdTris; lane++)
@@ -532,6 +524,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			int ly0 = minY.m128i_i32[lane];
 			int lx1 = maxX.m128i_i32[lane];
 			int ly1 = maxY.m128i_i32[lane];
+			float *pDepthRow = &pDepthBuffer[ly0 * mDepthPitch];
 
 
 			BlockSetup block;
@@ -540,20 +533,18 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			if (!sizeBig.m128i_i32[lane])
 			{
 				const __m128i &offs = edgeoffs[lane];
-
-				int rowIdx = ly0 * mDepthPitch + 2 * lx0;
-				DirectTri(&pDepthBuffer[rowIdx], offs.m128i_i32[0], offs.m128i_i32[1], offs.m128i_i32[2], block, lx1 - lx0 + 1, ly1 - ly0 + 1);
+				DirectTri(&pDepthRow[2 * lx0], offs.m128i_i32[0], offs.m128i_i32[1], offs.m128i_i32[2], block, lx1 - lx0 + 1, ly1 - ly0 + 1);
 			}
 			else
 			{
 				// Prepare for block traversal
 				__m128i sign = _mm_set1_epi32(0x80000000);
-				__m128i enmax = edgenmax[lane];
-
-				__m128i ex = _mm_slli_epi32(edgestepx[lane], BlockLog2);
-				__m128i ey = _mm_slli_epi32(edgestepy[lane], BlockLog2);
+				__m128i enmax = _mm_setr_epi32(e[0].nmax.m128i_i32[lane], e[1].nmax.m128i_i32[lane], e[2].nmax.m128i_i32[lane], e[1].nmax.m128i_i32[lane]);
+				__m128i estepx = _mm_setr_epi32(e[0].stepX.m128i_i32[lane], e[1].stepX.m128i_i32[lane], e[2].stepX.m128i_i32[lane], e[1].stepX.m128i_i32[lane]);
+				__m128i estepy = _mm_setr_epi32(e[0].stepY.m128i_i32[lane], e[1].stepY.m128i_i32[lane], e[2].stepY.m128i_i32[lane], e[1].stepY.m128i_i32[lane]);
+				__m128i ex = _mm_slli_epi32(estepx, BlockLog2);
+				__m128i ey = _mm_slli_epi32(estepy, BlockLog2);
 				__m128i cbmaxr = _mm_sub_epi32(edgeoffs[lane], enmax);
-				float *pDepthRow = &pDepthBuffer[ly0 * mDepthPitch];
 
 				// Loop through block rows
 				for (int y0 = ly0; y0 <= ly1; y0 += BlockSize)
