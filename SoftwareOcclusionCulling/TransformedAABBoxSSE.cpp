@@ -90,10 +90,12 @@ void TransformedAABBoxSSE::CreateAABBVertexIndexList(CPUTModelDX11 *pModel)
 	mWorldMatrix[2] = _mm_loadu_ps(world + 8);
 	mWorldMatrix[3] = _mm_loadu_ps(world + 12);
 
-	pModel->GetBoundsObjectSpace(&mBBCenter, &mBBHalf);
+	float3 bbHalf;
+	pModel->GetBoundsObjectSpace(&mBBCenter, &bbHalf);
+	mRadiusSq = bbHalf.lengthSq();
 
-	float3 min = mBBCenter - mBBHalf;
-	float3 max = mBBCenter + mBBHalf;
+	float3 min = mBBCenter - bbHalf;
+	float3 max = mBBCenter + bbHalf;
 	
 	//Top 4 vertices in BB
 	mpBBVertexList[0] = _mm_set_ps(1.0f, max.z, max.y, max.x);
@@ -120,8 +122,6 @@ void TransformedAABBoxSSE::IsInsideViewFrustum(CPUTCamera *pCamera)
 //----------------------------------------------------------------------------
 bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup)
 {
-	float radius = mBBHalf.lengthSq(); // Use length-squared to avoid sqrt().  Relative comparissons hold.
-
 	MatrixMultiply(mWorldMatrix, setup.mViewProjViewport, mCumulativeMatrix);
 
 	__m128 center = _mm_set_ps(1.0f, mBBCenter.z, mBBCenter.y, mBBCenter.x);
@@ -129,7 +129,7 @@ bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup)
     float w = mBBCenterOSxForm.m128_f32[3];
 	if( w > 1.0f )
 	{
-		return radius < w * setup.radiusThreshold;
+		return mRadiusSq < w * setup.radiusThreshold;
 	}
 	return false;
 }

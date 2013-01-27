@@ -57,7 +57,7 @@ class TransformedAABBoxSSE : public HelperSSE
 		bool    mInsideViewFrustum;
 
 		float3 mBBCenter;
-		float3 mBBHalf;
+		float  mRadiusSq;
 
 		void Gather(vFloat4 pOut[3], UINT triId, const __m128 *pXformedPos);
 };
