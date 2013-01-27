@@ -32,7 +32,7 @@ class TransformedAABBoxSSE : public HelperSSE
 		void IsInsideViewFrustum(CPUTCamera *pCamera);
 		void TransformAABBoxAndDepthTest();
 
-		bool IsTooSmall(__m128 *pViewMatrix, __m128 *pProjMatrix, CPUTCamera *pCamera);
+		bool IsTooSmall(__m128 *pViewProjViewportMatrix, CPUTCamera *pCamera);
 
 		void TransformAABBox(__m128 *pXformedPos);
 
@@ -52,7 +52,6 @@ class TransformedAABBoxSSE : public HelperSSE
 		bool    mInsideViewFrustum;
 		float   mOccludeeSizeThreshold;
 		bool    mTooSmall;
-		__m128 *mViewPortMatrix; 
 
 		float3 mBBCenter;
 		float3 mBBHalf;

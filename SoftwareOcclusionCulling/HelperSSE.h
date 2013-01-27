@@ -25,7 +25,6 @@ class HelperSSE
 		HelperSSE();
 		~HelperSSE();
 
-	protected:
 		struct vFloat4
 		{
 			__m128 X;
@@ -42,17 +41,17 @@ class HelperSSE
 			__m128i W;
 		};
 
-		__m128 TransformCoords(__m128 *v, __m128 *m);
-		void MatrixMultiply(__m128 *m1, __m128 *m2, __m128 *result);
+		static __m128 TransformCoords(__m128 *v, __m128 *m);
+		static void MatrixMultiply(__m128 *m1, __m128 *m2, __m128 *result);
 
-		__forceinline __m128i Min(const __m128i &v0, const __m128i &v1)
+		static __forceinline __m128i Min(const __m128i &v0, const __m128i &v1)
 		{
 			__m128i tmp;
 			tmp = _mm_min_epi32(v0, v1);
 			return tmp;
 		}
 
-		__forceinline __m128i Max(const __m128i &v0, const __m128i &v1)
+		static __forceinline __m128i Max(const __m128i &v0, const __m128i &v1)
 		{
 			__m128i tmp;
 			tmp = _mm_max_epi32(v0, v1);

@@ -51,13 +51,22 @@ void AABBoxRasterizerSSEST::TransformAABBoxAndDepthTest()
 	mDepthTestTimer.StartTimer();
 
 	__m128 xformedPos[AABB_VERTICES];
+	__m128 viewport[4];
+	viewport[0] = _mm_loadu_ps((float*)&viewportMatrix.r0);
+	viewport[1] = _mm_loadu_ps((float*)&viewportMatrix.r1);
+	viewport[2] = _mm_loadu_ps((float*)&viewportMatrix.r2);
+	viewport[3] = _mm_loadu_ps((float*)&viewportMatrix.r3);
+
+	__m128 viewProjViewport[4];
+	HelperSSE::MatrixMultiply(mViewMatrix, mProjMatrix, viewProjViewport);
+	HelperSSE::MatrixMultiply(viewProjViewport, viewport, viewProjViewport);
 
 	for(UINT i = 0; i < mNumModels; i++)
 	{
 		mpVisible[i] = false;
 		mpTransformedAABBox[i].SetVisible(&mpVisible[i]);
 	
-		if(mpTransformedAABBox[i].IsInsideViewFrustum() && !mpTransformedAABBox[i].IsTooSmall(mViewMatrix, mProjMatrix, mpCamera))
+		if(mpTransformedAABBox[i].IsInsideViewFrustum() && !mpTransformedAABBox[i].IsTooSmall(viewProjViewport, mpCamera))
 		{
 			mpTransformedAABBox[i].TransformAABBox(xformedPos);
 			mpTransformedAABBox[i].RasterizeAndDepthTestAABBox(mpRenderTargetPixels, xformedPos);

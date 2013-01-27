@@ -53,20 +53,13 @@ TransformedAABBoxSSE::TransformedAABBoxSSE()
 {
 	mWorldMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
 	mpBBVertexList = (__m128*)_aligned_malloc(sizeof(float) * 4 * AABB_VERTICES, 16);
-	mViewPortMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
 	mCumulativeMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16); 
-
-	mViewPortMatrix[0] = _mm_loadu_ps((float*)&viewportMatrix.r0);
-	mViewPortMatrix[1] = _mm_loadu_ps((float*)&viewportMatrix.r1);
-	mViewPortMatrix[2] = _mm_loadu_ps((float*)&viewportMatrix.r2);
-	mViewPortMatrix[3] = _mm_loadu_ps((float*)&viewportMatrix.r3);
 }
 
 TransformedAABBoxSSE::~TransformedAABBoxSSE()
 {
 	_aligned_free(mWorldMatrix);
 	_aligned_free(mpBBVertexList);
-	_aligned_free(mViewPortMatrix);
 	_aligned_free(mCumulativeMatrix);
 }
 
@@ -112,16 +105,14 @@ void TransformedAABBoxSSE::IsInsideViewFrustum(CPUTCamera *pCamera)
 //----------------------------------------------------------------------------
 // Determine if the occluddee size is too small and if so avoid drawing it
 //----------------------------------------------------------------------------
-bool TransformedAABBoxSSE::IsTooSmall(__m128 *pViewMatrix, __m128 *pProjMatrix, CPUTCamera *pCamera)
+bool TransformedAABBoxSSE::IsTooSmall(__m128 *pViewProjViewportMatrix, CPUTCamera *pCamera)
 {
 	float radius = mBBHalf.lengthSq(); // Use length-squared to avoid sqrt().  Relative comparissons hold.
 	float fov = pCamera->GetFov();
 	float tanOfHalfFov = tanf(fov * 0.5f);
 	mTooSmall = false;
 
-	MatrixMultiply(mWorldMatrix, pViewMatrix, mCumulativeMatrix);
-	MatrixMultiply(mCumulativeMatrix, pProjMatrix, mCumulativeMatrix);
-	MatrixMultiply(mCumulativeMatrix, mViewPortMatrix, mCumulativeMatrix);
+	MatrixMultiply(mWorldMatrix, pViewProjViewportMatrix, mCumulativeMatrix);
 
 	__m128 center = _mm_set_ps(1.0f, mBBCenter.z, mBBCenter.y, mBBCenter.x);
 	__m128 mBBCenterOSxForm = TransformCoords(&center, mCumulativeMatrix);
