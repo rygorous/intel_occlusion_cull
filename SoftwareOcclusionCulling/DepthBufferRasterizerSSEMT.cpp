@@ -312,15 +312,10 @@ static __forceinline void DirectTri(float *pDepthRow, int e0, int e1, int e2, co
 			beta = _mm_add_epi32(beta, setup.e[1].quadX);
 			gama = _mm_add_epi32(gama, setup.e[2].quadX);
 
-			// Early out if all of this quad's pixels are outside the triangle
-			if(_mm_testc_si128(mask, _mm_set1_epi32(0x80000000)))
-				continue;
-
 			// Compute barycentric-interpolated depth
 			__m128 prevDepth = _mm_load_ps(pDepth);
-			__m128 depthMask = _mm_cmpge_ps(depth, prevDepth);
-			__m128 finalMask = _mm_andnot_ps(_mm_castsi128_ps(mask), depthMask);
-			__m128 oDepth = _mm_blendv_ps(prevDepth, depth, finalMask);
+			__m128 depthMax  = _mm_max_ps(depth, prevDepth);
+			__m128 oDepth = _mm_blendv_ps(depthMax, prevDepth, _mm_castsi128_ps(mask));
 			_mm_store_ps(pDepth, oDepth);
 		}
 
@@ -348,43 +343,20 @@ static __forceinline void PartialBlock(float *pDepth, __m128i e, BlockSetup &set
 			beta = _mm_add_epi32(beta, setup.e[1].quadX);
 			gama = _mm_add_epi32(gama, setup.e[2].quadX);
 
-			// Early out if all of this quad's pixels are outside the triangle
-			if(_mm_testc_si128(mask, _mm_set1_epi32(0x80000000)))
-				continue;
+			//// Early out if all of this quad's pixels are outside the triangle
+			//if(_mm_testc_si128(mask, _mm_set1_epi32(0x80000000)))
+			//	continue;
 
 			// Compute barycentric-interpolated depth
 			__m128 prevDepth = _mm_load_ps(&pDepth[x*2]);
-			__m128 depthMask = _mm_cmpge_ps(depth, prevDepth);
-			__m128 finalMask = _mm_andnot_ps(_mm_castsi128_ps(mask), depthMask);
-			__m128 oDepth = _mm_blendv_ps(prevDepth, depth, finalMask);
+			__m128 depthMax  = _mm_max_ps(depth, prevDepth);
+			__m128 oDepth = _mm_blendv_ps(depthMax, prevDepth, _mm_castsi128_ps(mask));
 			_mm_store_ps(&pDepth[x*2], oDepth);
 		}
 
 		alph = _mm_add_epi32(alph, setup.e[0].line);
 		beta = _mm_add_epi32(beta, setup.e[1].line);
 		gama = _mm_add_epi32(gama, setup.e[2].line);
-	}
-}
-
-static __forceinline void SolidBlock(float *pDepth, __m128i e, BlockSetup &setup)
-{
-	__m128i beta = _mm_add_epi32(_mm_shuffle_epi32(e, 0x55), setup.e[1].offs);
-	__m128i gama = _mm_add_epi32(_mm_shuffle_epi32(e, 0xaa), setup.e[2].offs);
-
-	for (int y=0; y < BlockSize; y += 2, pDepth += setup.pitch)
-	{
-		__m128 depth = BaryDepth(setup, beta, gama);
-		beta = _mm_add_epi32(beta, setup.e[1].quadY);
-		gama = _mm_add_epi32(gama, setup.e[2].quadY);
-
-		for (int x=0; x < BlockSize; x += 2)
-		{
-			// Compute barycentric-interpolated depth
-			__m128 prevDepth = _mm_load_ps(&pDepth[x*2]);
-			__m128 oDepth = _mm_max_ps(depth, prevDepth);
-			depth = _mm_add_ps(depth, setup.z[3]);
-			_mm_store_ps(&pDepth[x*2], oDepth);
-		}
 	}
 }
 
@@ -416,8 +388,6 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 
 	static const int BLOCKW = (TILE_WIDTH_IN_PIXELS + BlockSize-1) / BlockSize;
 	static const int BLOCKH = (TILE_HEIGHT_IN_PIXELS + BlockSize-1) / BlockSize;
-	float blockMinZ[BLOCKW*BLOCKH];
-	memset(blockMinZ, 0, sizeof(blockMinZ));
 
 	// Based on TaskId determine which tile to process
 	UINT screenWidthInTiles = SCREENW/TILE_WIDTH_IN_PIXELS;
@@ -548,7 +518,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 		// Sizes
 		__m128i sizeX = _mm_sub_epi32(maxX, minX);
 		__m128i sizeY = _mm_sub_epi32(maxY, minY);
-		__m128i sizeMin = _mm_max_epi32(sizeX, sizeY);
+		__m128i sizeMin = _mm_min_epi32(sizeX, sizeY);
 		__m128i sizeBig = _mm_cmpgt_epi32(sizeMin, _mm_set1_epi32(2*BlockSize));
 
 		// Edges again (batch-transpose!)
@@ -610,10 +580,8 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 				// Loop through block rows
 				for (int y0 = ly0; y0 <= ly1; y0 += BlockSize)
 				{
-					float *pMinZ = &blockMinZ[((y0 - tileStartY) >> BlockLog2) * BLOCKW + ((lx0 - tileStartX) >> BlockLog2)];
-
 					__m128i cbmax = cbmaxr;
-					for (int x0 = lx0; x0 <= lx1; x0 += BlockSize, cbmax = _mm_add_epi32(cbmax, ex), pMinZ++)
+					for (int x0 = lx0; x0 <= lx1; x0 += BlockSize, cbmax = _mm_add_epi32(cbmax, ex))
 				__m128i alpha = _mm_sub_epi32(_mm_sub_epi32(sum, beta), gama);
 					{
 						if (!_mm_testz_si128(cbmax, sign))
@@ -621,29 +589,9 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 
 						// Okay, this block is in. Render it.
 						float *pDepth = &pDepthRow[x0 * 2];
-
-						// Accept whole block when fully covered
-						__m128i cbmin = _mm_add_epi32(cbmax, endiff);
 						__m128i cb = _mm_add_epi32(cbmax, enmax);
 
-						// Block base Z
-						float z0 = Z[0].m128_f32[lane] + cb.m128i_i32[1] * Z[1].m128_f32[lane] + cb.m128i_i32[2] * Z[2].m128_f32[lane];
-
-						// Z trivial reject test
-						float zmax = z0 + Znmax.m128_f32[lane];
-						if (*pMinZ > zmax)
-							continue;
-
-						if (_mm_testz_si128(cbmin, sign))
-						{
-							float zmin = z0 + Znmin.m128_f32[lane];
-							if (zmin > *pMinZ)
-								*pMinZ = zmin;
-
-							SolidBlock(pDepth, cb, block);
-						}
-						else
-							PartialBlock(pDepth, cb, block);
+						PartialBlock(pDepth, cb, block);
 					}
 
 					cbmaxr = _mm_add_epi32(cbmaxr, ey);
