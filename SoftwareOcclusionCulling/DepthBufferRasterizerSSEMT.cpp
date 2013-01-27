@@ -212,6 +212,28 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(VOID* tas
 	sample->RasterizeBinnedTrianglesToDepthBuffer(taskId, taskCount);
 }
 
+// ---- Block size specific
+
+static UINT EncodePosX(UINT x)
+{
+	return (x >> 1) * 4 + (x & 1);
+}
+
+static UINT EncodePosY(UINT y)
+{
+	return (y >> 1)*SCREENW*2 + ((y & 1) << 1);
+}
+
+static UINT StepX2(UINT x)
+{
+	return x + 4;
+}
+
+static UINT StepY2(UINT y)
+{
+	return y + SCREENW*2;
+}
+
 //-------------------------------------------------------------------------------
 // For each tile go through all the bins and process all the triangles in it.
 // Rasterize each triangle to the CPU depth buffer. 
@@ -369,8 +391,10 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 
 			// Traverse pixels in 2x2 blocks and store 2x2 pixel quad depths contiguously in memory ==> 2*X
 			// This method provides better perfromance
-			int rowIdx = (startYy * SCREENW + 2 * startXx);
-			int rowSamples = (endXx - startXx + 1) * 2;
+			UINT ofs_x0 = EncodePosX(startXx);
+			UINT ofs_x1 = EncodePosX(endXx);
+			UINT ofs_y0 = EncodePosY(startYy);
+			UINT ofs_y1 = EncodePosY(endYy);
 
 			col = _mm_add_epi32(colOffset, _mm_set1_epi32(startXx));
 			__m128i aa1Col = _mm_mullo_epi32(aa1, col);
@@ -383,12 +407,10 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			__m128i bb1Inc = _mm_slli_epi32(bb1, 1);
 			__m128i bb2Inc = _mm_slli_epi32(bb2, 1);
 
-			for(int r = startYy; r <= endYy; r += 2,
-											rowIdx = rowIdx + 2 * SCREENW)
+			for(UINT ofs_y = ofs_y0; ofs_y <= ofs_y1; ofs_y = StepY2(ofs_y))
 			{
 				// Compute barycentric coordinates 
-				float *pDepthStart = &pDepthBuffer[rowIdx];
-				float *pDepthEnd = pDepthStart + rowSamples;
+				float *pDepth = &pDepthBuffer[ofs_y];
 				__m128i beta = _mm_add_epi32(aa1Col, bb1Row);
 				__m128i gama = _mm_add_epi32(aa2Col, bb2Row);
 				__m128i alpha = _mm_sub_epi32(_mm_sub_epi32(sum, beta), gama);
@@ -396,7 +418,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 				bb1Row = _mm_add_epi32(bb1Row, bb1Inc);
 				bb2Row = _mm_add_epi32(bb2Row, bb2Inc);
 
-				for(float *pDepth = pDepthStart; pDepth < pDepthEnd; pDepth += 4)
+				for(UINT ofs_x = ofs_x0; ofs_x <= ofs_x1; ofs_x = StepX2(ofs_x))
 				{
 					//Test Pixel inside triangle
 					__m128i mask = _mm_or_si128(_mm_or_si128(alpha, beta), gama);
@@ -410,10 +432,10 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), zz[2]));
 
 					// Update depth buffer
-					__m128 previousDepthValue = _mm_load_ps(pDepth);
+					__m128 previousDepthValue = _mm_load_ps(&pDepth[ofs_x]);
 					depth = _mm_max_ps(depth, previousDepthValue);
 					depth = _mm_blendv_ps(depth, previousDepthValue, _mm_castsi128_ps(mask));
-					_mm_store_ps(pDepth, depth);
+					_mm_store_ps(&pDepth[ofs_x], depth);
 				}//for each column											
 			}// for each row
 		}// for each triangle
