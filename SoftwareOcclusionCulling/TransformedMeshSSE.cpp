@@ -125,16 +125,17 @@ void TransformedMeshSSE::BinTransformedTrianglesST(UINT taskId,
 		__m128 oneOverTriArea = _mm_div_ps(_mm_set1_ps(1.0f), _mm_cvtepi32_ps(triArea));
 
 		__m128i vStartX = Max(Min(Min(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(0));
-		__m128i vEndX   = Min(_mm_add_epi32(Max(Max(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(1)), _mm_set1_epi32(SCREENW));
+		__m128i vEndX   = Min(Max(Max(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(SCREENW-1));
 
         __m128i vStartY = Max(Min(Min(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(0));
-        __m128i vEndY   = Min(_mm_add_epi32(Max(Max(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(1)), _mm_set1_epi32(SCREENH));
+        __m128i vEndY   = Min(Max(Max(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(SCREENH-1));
 
 
 		for(int i = 0; i < numLanes; i++)
 		{
 			// Skip triangle if area is zero 
 			if(triArea.m128i_i32[i] <= 0) continue;
+			if(vEndX.m128i_i32[i] < vStartX.m128i_i32[i] || vEndY.m128i_i32[i] < vStartY.m128i_i32[i]) continue;
 			
 			float oneOverW[3];
 			for(int j = 0; j < 3; j++)

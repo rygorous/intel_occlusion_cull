@@ -13,8 +13,8 @@ float4 PSMain(float4 pos : SV_Position) : SV_Target
 		int inY = (int) pos.y;
 
 		// perform swizzle
-		int x = (inX & 1) + ((inY & 1) << 1) + ((inX & ~1) << 1);
-		int y = inY >> 1;
+		int x = (inX & 1) + ((inY & 1) << 1) + ((inX & 2) << 1) + ((inY & 2) << 2) + ((inX & ~3) << 2);
+		int y = inY >> 2;
 
 		return tex.Load(int3(x, y, 0));
 }

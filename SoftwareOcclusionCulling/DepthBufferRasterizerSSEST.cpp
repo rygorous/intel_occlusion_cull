@@ -268,8 +268,10 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
 
 			// Traverse pixels in 2x2 blocks and store 2x2 pixel quad depths contiguously in memory ==> 2*X
 			// This method provides better perfromance
-			int rowIdx = (startYy * SCREENW + 2 * startXx);
-			int rowSamples = (endXx - startXx + 1) * 2;
+			UINT ofs_x0 = EncodePosX(startXx);
+			UINT ofs_x1 = EncodePosX(endXx);
+			UINT ofs_y0 = EncodePosY(startYy);
+			UINT ofs_y1 = EncodePosY(endYy);
 
 			col = _mm_add_epi32(colOffset, _mm_set1_epi32(startXx));
 			__m128i aa1Col = _mm_mullo_epi32(aa1, col);
@@ -283,20 +285,18 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
 			__m128i bb2Inc = _mm_slli_epi32(bb2, 1);
 
 			// Incrementally compute Fab(x, y) for all the pixels inside the bounding box formed by (startX, endX) and (startY, endY)
-			for(int r = startYy; r <= endYy; r += 2,
-											row  = _mm_add_epi32(row, _mm_set1_epi32(2)),
-											rowIdx = rowIdx + 2 * SCREENW,
-											bb1Row = _mm_add_epi32(bb1Row, bb1Inc),
-											bb2Row = _mm_add_epi32(bb2Row, bb2Inc))
+			for(UINT ofs_y = ofs_y0; ofs_y <= ofs_y1; ofs_y = StepY2(ofs_y))
 			{
 				// Compute barycentric coordinates 
-				float *pDepthStart = &pDepthBuffer[rowIdx];
-				float *pDepthEnd = pDepthStart + rowSamples;
+				float *pDepth = &pDepthBuffer[ofs_y];
 				__m128i beta = _mm_add_epi32(aa1Col, bb1Row);
 				__m128i gama = _mm_add_epi32(aa2Col, bb2Row);
 				__m128i alpha = _mm_sub_epi32(_mm_sub_epi32(sum, beta), gama);
 
-				for(float *pDepth = pDepthStart; pDepth < pDepthEnd; pDepth += 4)
+				bb1Row = _mm_add_epi32(bb1Row, bb1Inc);
+				bb2Row = _mm_add_epi32(bb2Row, bb2Inc);
+
+				for(UINT ofs_x = ofs_x0; ofs_x <= ofs_x1; ofs_x = StepX2(ofs_x))
 				{
 					//Test Pixel inside triangle
 					__m128i mask = _mm_or_si128(_mm_or_si128(alpha, beta), gama);
@@ -310,10 +310,10 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
 					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), zz[2]));
 					
 					// Update depth buffer
-					__m128 previousDepthValue = _mm_load_ps(pDepth);
+					__m128 previousDepthValue = _mm_load_ps(&pDepth[ofs_x]);
 					depth = _mm_max_ps(depth, previousDepthValue);
 					depth = _mm_blendv_ps(depth, previousDepthValue, _mm_castsi128_ps(mask));
-					_mm_store_ps(pDepth, depth);
+					_mm_store_ps(&pDepth[ofs_x], depth);
 				}//for each column											
 			}// for each row
 		}// for each triangle

@@ -68,5 +68,71 @@ const int OCCLUDEE_SETS = 4;
 
 const int AVG_COUNTER = 10;
 
+// ---- Block size specific
+
+#if 0
+
+const int SWIZ_SIZE = 2;
+
+static UINT EncodePosX(UINT x)
+{
+	return (x >> 1) * 4 + (x & 1);
+}
+
+static UINT EncodePosY(UINT y)
+{
+	return (y >> 1)*SCREENW*2 + ((y & 1) << 1);
+}
+
+static UINT StepX2(UINT x)
+{
+	return x + 4;
+}
+
+static UINT StepY2(UINT y)
+{
+	return y + SCREENW*2;
+}
+
+#else
+
+const int SWIZ_SIZE = 4;
+
+// blk|y1|x1|y0|x0
+
+static UINT EncodePosX(UINT x)
+{
+	UINT offs = (x & ~3) << 2;
+	offs |= (x & 2) << 1;
+	offs |= (x & 1) << 0;
+	return offs;
+}
+
+static UINT EncodePosY(UINT y)
+{
+	UINT offs = (y >> 2) * SCREENW*SWIZ_SIZE;
+	offs |= (y & 2) << 2;
+	offs |= (y & 1) << 1;
+	return offs;
+}
+
+static UINT StepX2(UINT x)
+{
+	static const UINT xinc = ~0xb; // increment x1, blk
+	return (x - xinc) & xinc;
+}
+
+static UINT StepY2(UINT y)
+{
+	static const UINT ylomask = 0x8;
+	static const UINT yinc = ylomask | ~0xf;
+
+	if ((y & ylomask) != ylomask)
+		return (y - yinc) & yinc;
+	else
+		return (y & ~ylomask) + SCREENW*SWIZ_SIZE;
+}
+
+#endif
 
 #endif

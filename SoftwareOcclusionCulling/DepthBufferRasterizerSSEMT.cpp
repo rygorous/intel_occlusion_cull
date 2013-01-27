@@ -212,28 +212,6 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(VOID* tas
 	sample->RasterizeBinnedTrianglesToDepthBuffer(taskId, taskCount);
 }
 
-// ---- Block size specific
-
-static UINT EncodePosX(UINT x)
-{
-	return (x >> 1) * 4 + (x & 1);
-}
-
-static UINT EncodePosY(UINT y)
-{
-	return (y >> 1)*SCREENW*2 + ((y & 1) << 1);
-}
-
-static UINT StepX2(UINT x)
-{
-	return x + 4;
-}
-
-static UINT StepY2(UINT y)
-{
-	return y + SCREENW*2;
-}
-
 //-------------------------------------------------------------------------------
 // For each tile go through all the bins and process all the triangles in it.
 // Rasterize each triangle to the CPU depth buffer. 

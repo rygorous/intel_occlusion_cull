@@ -143,8 +143,8 @@ void MySample::Create()
 
 	CD3D11_TEXTURE2D_DESC cpuRenderTargetDesc(
             DXGI_FORMAT_R8G8B8A8_UNORM,
-            SCREENW * 2, // TODO: round up to full tile sizes
-            SCREENH / 2,
+            SCREENW * SWIZ_SIZE, // TODO: round up to full tile sizes
+            SCREENH / SWIZ_SIZE,
             1, // Array Size
             1, // MIP Levels
 			D3D11_BIND_SHADER_RESOURCE,
@@ -802,7 +802,7 @@ void MySample::Render(double deltaSeconds)
 	if(mViewDepthBuffer)
 	{
 		// Update the GPU-side depth buffer
-		mpContext->UpdateSubresource(mpCPURenderTarget, 0, NULL, mpCPUDepthBuf, 2 * SCREENW * 4, 0);
+		mpContext->UpdateSubresource(mpCPURenderTarget, 0, NULL, mpCPUDepthBuf, sizeof(float) * (SCREENW * SWIZ_SIZE), 0);
 		mpShowDepthBufMtrl->SetRenderStates(renderParams);
 		mpContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 		mpContext->Draw(3, 0);
