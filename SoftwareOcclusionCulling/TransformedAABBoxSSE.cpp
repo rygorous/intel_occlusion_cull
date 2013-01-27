@@ -227,11 +227,6 @@ bool TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 		Z[1] = _mm_mul_ps(_mm_sub_ps(xformedPos[1].Z, xformedPos[0].Z), oneOverTriArea);
 		Z[2] = _mm_mul_ps(_mm_sub_ps(xformedPos[2].Z, xformedPos[0].Z), oneOverTriArea);
 
-		// When we interpolate, beta and gama have already been advanced
-		// by one block, so compensate here.
-		Z[0] = _mm_sub_ps(Z[0], _mm_mul_ps(_mm_cvtepi32_ps(_mm_slli_epi32(A1, 1)), Z[1]));
-		Z[0] = _mm_sub_ps(Z[0], _mm_mul_ps(_mm_cvtepi32_ps(_mm_slli_epi32(A2, 1)), Z[2]));
-
 		// Use bounding box traversal strategy to determine which pixels to rasterize 
 		__m128i startX = _mm_and_si128(Max(Min(Min(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(0)), _mm_set1_epi32(0xFFFFFFFE));
 		__m128i endX   = Min(Max(Max(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(SCREENW-1));
@@ -327,25 +322,19 @@ bool TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 
 				for(UINT ofs_x = ofs_x0; ofs_x <= ofs_x1; ofs_x = StepX2(ofs_x))
 				{
+					// Compute barycentric-interpolated depth
+			        __m128 depth = zz[0];
+					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), zz[1]));
+					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), zz[2]));
+
 					//Test Pixel inside triangle
 					__m128i mask = _mm_or_si128(_mm_or_si128(alpha, beta), gama);
 					alpha = _mm_sub_epi32(alpha, aa0Dec);
 					beta  = _mm_add_epi32(beta, aa1Inc);
 					gama  = _mm_add_epi32(gama, aa2Inc);
 
-					// Early out if all of this quad's pixels are outside the triangle.
-					if(_mm_testc_si128(mask, _mm_set1_epi32(0x80000000)))
-					{
-						continue;
-					}
-
-					// Compute barycentric-interpolated depth
-			        __m128 depth = zz[0];
-					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), zz[1]));
-					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), zz[2]));
-
+					// Depth test
 					__m128 previousDepthValue = _mm_load_ps(&pDepth[ofs_x]);
-
 					__m128 depthMask  = _mm_cmpge_ps( depth, previousDepthValue);
 					__m128i finalMask = _mm_andnot_si128( mask, _mm_castps_si128(depthMask));
 					if(!_mm_test_all_zeros(finalMask, finalMask))

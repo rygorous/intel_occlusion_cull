@@ -322,11 +322,6 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 		Z[1] = _mm_mul_ps(_mm_sub_ps(xformedvPos[1].Z, xformedvPos[0].Z), oneOverTriArea);
 		Z[2] = _mm_mul_ps(_mm_sub_ps(xformedvPos[2].Z, xformedvPos[0].Z), oneOverTriArea);
 
-		// When we interpolate, beta and gama have already been advanced
-		// by one block, so compensate here.
-		Z[0] = _mm_sub_ps(Z[0], _mm_mul_ps(_mm_cvtepi32_ps(_mm_slli_epi32(A1, 1)), Z[1]));
-		Z[0] = _mm_sub_ps(Z[0], _mm_mul_ps(_mm_cvtepi32_ps(_mm_slli_epi32(A2, 1)), Z[2]));
-
 		// Use bounding box traversal strategy to determine which pixels to rasterize 
 		__m128i startX = _mm_and_si128(Max(Min(Min(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileStartX)), _mm_set1_epi32(0xFFFFFFFE));
 		__m128i endX   = Min(Max(Max(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileEndX));
@@ -398,17 +393,17 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 
 				for(UINT ofs_x = ofs_x0; ofs_x <= ofs_x1; ofs_x = StepX2(ofs_x))
 				{
+					// Compute barycentric-interpolated depth
+			        __m128 depth = zz[0];
+					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), zz[1]));
+					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), zz[2]));
+
 					//Test Pixel inside triangle
 					__m128i mask = _mm_or_si128(_mm_or_si128(alpha, beta), gama);
 					alpha = _mm_sub_epi32(alpha, aa0Dec);
 					beta  = _mm_add_epi32(beta, aa1Inc);
 					gama  = _mm_add_epi32(gama, aa2Inc);
 					
-					// Compute barycentric-interpolated depth
-			        __m128 depth = zz[0];
-					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), zz[1]));
-					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), zz[2]));
-
 					// Update depth buffer
 					__m128 previousDepthValue = _mm_load_ps(&pDepth[ofs_x]);
 					depth = _mm_max_ps(depth, previousDepthValue);
