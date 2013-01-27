@@ -220,7 +220,6 @@ struct FourEdges
 	__m128i stepX;
 	__m128i stepY;
 	__m128i offs;
-	__m128i nmin;
 	__m128i nmax;
 
 	__forceinline void setup(const __m128i &x0, const __m128i &y0, const __m128i &x1, const __m128i &y1)
@@ -233,10 +232,7 @@ struct FourEdges
 
 		// min/max corners
 		__m128i zero = _mm_setzero_si128();
-		nmin = _mm_add_epi32(_mm_min_epi32(stepX, zero), _mm_min_epi32(stepY, zero));
 		nmax = _mm_add_epi32(_mm_max_epi32(stepX, zero), _mm_max_epi32(stepY, zero));
-
-		nmin = _mm_mullo_epi32(nmin, _mm_set1_epi32(1 - BlockSize));
 		nmax = _mm_mullo_epi32(nmax, _mm_set1_epi32(1 - BlockSize));
 	}
 
@@ -499,10 +495,6 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 		Z[3] = _mm_add_ps(_mm_mul_ps(Z[1], _mm_cvtepi32_ps(e[1].stepX)), _mm_mul_ps(Z[2], _mm_cvtepi32_ps(e[2].stepX)));
 		Z[4] = _mm_add_ps(_mm_mul_ps(Z[1], _mm_cvtepi32_ps(e[1].stepY)), _mm_mul_ps(Z[2], _mm_cvtepi32_ps(e[2].stepY)));
 
-		__m128 zerof = _mm_setzero_ps();
-		__m128 Znmin = _mm_mul_ps(_mm_add_ps(_mm_min_ps(Z[3], zerof), _mm_min_ps(Z[4], zerof)), _mm_set1_ps(BlockSize - 1.0f));
-		__m128 Znmax = _mm_mul_ps(_mm_add_ps(_mm_max_ps(Z[3], zerof), _mm_max_ps(Z[4], zerof)), _mm_set1_ps(BlockSize - 1.0f));
-
 		// Bounding rectangle
 		__m128i minX = Max(Min(Min(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileStartX));
 		__m128i minY = Max(Min(Min(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(tileStartY));
@@ -522,7 +514,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 		__m128i sizeBig = _mm_cmpgt_epi32(sizeMin, _mm_set1_epi32(2*BlockSize));
 
 		// Edges again (batch-transpose!)
-		__m128i edgenmin[4], edgenmax[4], edgeoffs[4], edgecbmax[4], edgestepx[4], edgestepy[4];
+		__m128i edgenmax[4], edgeoffs[4], edgecbmax[4], edgestepx[4], edgestepy[4];
 
 		if (!_mm_testc_si128(sizeBig, _mm_set1_epi32(-1))) // any small?
 		{
@@ -534,7 +526,6 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			__m128i cb0 = _mm_sub_epi32(e[0].getOffs(minXSnap, minYSnap), e[0].nmax);
 			__m128i cb1 = _mm_sub_epi32(e[1].getOffs(minXSnap, minYSnap), e[1].nmax);
 			__m128i cb2 = _mm_sub_epi32(e[2].getOffs(minXSnap, minYSnap), e[2].nmax);
-			Transpose4x3(edgenmin, e[0].nmin, e[1].nmin, e[2].nmin);
 			Transpose4x3(edgenmax, e[0].nmax, e[1].nmax, e[2].nmax);
 			Transpose4x3(edgecbmax, cb0, cb1, cb2);
 			Transpose4x3(edgestepx, e[0].stepX, e[1].stepX, e[2].stepX);
@@ -568,9 +559,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 
 				// Prepare for block traversal
 				__m128i sign = _mm_set1_epi32(0x80000000);
-				__m128i enmin = edgenmin[lane];
 				__m128i enmax = edgenmax[lane];
-				__m128i endiff = _mm_sub_epi32(enmax, enmin);
 
 				__m128i ex = _mm_slli_epi32(edgestepx[lane], BlockLog2);
 				__m128i ey = _mm_slli_epi32(edgestepy[lane], BlockLog2);
