@@ -49,10 +49,7 @@ class AABBoxRasterizerSSE : public AABBoxRasterizer
 		inline void SetDepthTestTasks(UINT numTasks) {mNumDepthTestTasks = numTasks;}
 		inline void SetOccludeeSizeThreshold(float occludeeSizeThreshold)
 		{
-			for(UINT i = 0; i < mNumModels; i++)
-			{
-				mpTransformedAABBox[i].SetOccludeeSizeThreshold(occludeeSizeThreshold);
-			}
+			mOccludeeSizeThreshold = occludeeSizeThreshold;
 		}
 		inline void SetCamera(CPUTCamera *pCamera) {mpCamera = pCamera;}
 

@@ -156,15 +156,8 @@ void AABBoxRasterizerSSE::Render(CPUTAssetSet **pAssetSet,
 {
 	int count = 0;
 
-	__m128 viewport[4];
-	viewport[0] = _mm_loadu_ps((float*)&viewportMatrix.r0);
-	viewport[1] = _mm_loadu_ps((float*)&viewportMatrix.r1);
-	viewport[2] = _mm_loadu_ps((float*)&viewportMatrix.r2);
-	viewport[3] = _mm_loadu_ps((float*)&viewportMatrix.r3);
-
-	__m128 viewProjViewport[4];
-	HelperSSE::MatrixMultiply(mViewMatrix, mProjMatrix, viewProjViewport);
-	HelperSSE::MatrixMultiply(viewProjViewport, viewport, viewProjViewport);
+	BoxTestSetup setup;
+	setup.Init(mViewMatrix, mProjMatrix, mpCamera, mOccludeeSizeThreshold);
 
 	for(UINT assetId = 0, modelId = 0; assetId < numAssetSets; assetId++)
 	{
@@ -175,7 +168,7 @@ void AABBoxRasterizerSSE::Render(CPUTAssetSet **pAssetSet,
 			ASSERT((CPUT_SUCCESS == result), _L ("Failed getting asset by index")); 
 			if(pRenderNode->IsModel())
 			{
-				if(!mpTransformedAABBox[modelId].IsTooSmall(viewProjViewport, mpCamera))
+				if(!mpTransformedAABBox[modelId].IsTooSmall(setup))
 				{
 					CPUTModelDX11* model = (CPUTModelDX11*)pRenderNode;
 					model = (CPUTModelDX11*)pRenderNode;

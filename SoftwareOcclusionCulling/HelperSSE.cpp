@@ -44,7 +44,7 @@ __m128 HelperSSE::TransformCoords(__m128 *v, __m128 *m)
 }
 
 
-void HelperSSE::MatrixMultiply(__m128 *m1, __m128 *m2, __m128 *result)
+void HelperSSE::MatrixMultiply(const __m128 *m1, const __m128 *m2, __m128 *result)
 {
 	__m128 X, Y, Z, W;
 	float *mat = (float*)m1;

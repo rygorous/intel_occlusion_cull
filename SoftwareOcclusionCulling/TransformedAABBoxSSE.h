@@ -23,6 +23,14 @@
 #include "Constants.h"
 #include "HelperSSE.h"
 
+struct BoxTestSetup : public HelperSSE
+{
+	__m128 mViewProjViewport[4];
+	float radiusThreshold;
+
+	void Init(__m128 viewMatrix[4], __m128 projMatrix[4], CPUTCamera *pCamera, float occludeeSizeThreshold);
+};
+
 class TransformedAABBoxSSE : public HelperSSE
 {
 	public:
@@ -32,7 +40,7 @@ class TransformedAABBoxSSE : public HelperSSE
 		void IsInsideViewFrustum(CPUTCamera *pCamera);
 		void TransformAABBoxAndDepthTest();
 
-		bool IsTooSmall(__m128 *pViewProjViewportMatrix, CPUTCamera *pCamera);
+		bool IsTooSmall(const BoxTestSetup &setup);
 
 		void TransformAABBox(__m128 *pXformedPos);
 
@@ -41,7 +49,6 @@ class TransformedAABBoxSSE : public HelperSSE
 		inline void SetInsideViewFrustum(bool insideVF){mInsideViewFrustum = insideVF;}
 		inline bool IsInsideViewFrustum(){ return mInsideViewFrustum;}
 		inline void SetVisible(bool *visible){mVisible = visible;}
-		inline void SetOccludeeSizeThreshold(float occludeeSizeThreshold){mOccludeeSizeThreshold = occludeeSizeThreshold;}
 
 	private:
 		CPUTModelDX11 *mpCPUTModel;
@@ -50,7 +57,6 @@ class TransformedAABBoxSSE : public HelperSSE
 		__m128 *mCumulativeMatrix; 
 		bool   *mVisible;
 		bool    mInsideViewFrustum;
-		float   mOccludeeSizeThreshold;
 		bool    mTooSmall;
 
 		float3 mBBCenter;

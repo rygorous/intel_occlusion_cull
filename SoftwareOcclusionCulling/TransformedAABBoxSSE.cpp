@@ -44,11 +44,26 @@ static const UINT sBBIndexList[AABB_INDICES] =
 	1, 6, 0,
 };
 
+void BoxTestSetup::Init(__m128 viewMatrix[4], __m128 projMatrix[4], CPUTCamera *pCamera, float occludeeSizeThreshold)
+{
+	__m128 viewport[4];
+	viewport[0] = _mm_loadu_ps((float*)&viewportMatrix.r0);
+	viewport[1] = _mm_loadu_ps((float*)&viewportMatrix.r1);
+	viewport[2] = _mm_loadu_ps((float*)&viewportMatrix.r2);
+	viewport[3] = _mm_loadu_ps((float*)&viewportMatrix.r3);
+
+	HelperSSE::MatrixMultiply(viewMatrix, projMatrix, mViewProjViewport);
+	HelperSSE::MatrixMultiply(mViewProjViewport, viewport, mViewProjViewport);
+
+	float fov = pCamera->GetFov();
+	float tanOfHalfFov = tanf(fov * 0.5f);
+	radiusThreshold = occludeeSizeThreshold * occludeeSizeThreshold * tanOfHalfFov;
+}
+
 TransformedAABBoxSSE::TransformedAABBoxSSE()
 	: mpCPUTModel(NULL),
 	  mVisible(NULL),
 	  mInsideViewFrustum(true),
-	  mOccludeeSizeThreshold(0.0f),
 	  mTooSmall(false)
 {
 	mWorldMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
@@ -105,24 +120,19 @@ void TransformedAABBoxSSE::IsInsideViewFrustum(CPUTCamera *pCamera)
 //----------------------------------------------------------------------------
 // Determine if the occluddee size is too small and if so avoid drawing it
 //----------------------------------------------------------------------------
-bool TransformedAABBoxSSE::IsTooSmall(__m128 *pViewProjViewportMatrix, CPUTCamera *pCamera)
+bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup)
 {
 	float radius = mBBHalf.lengthSq(); // Use length-squared to avoid sqrt().  Relative comparissons hold.
-	float fov = pCamera->GetFov();
-	float tanOfHalfFov = tanf(fov * 0.5f);
 	mTooSmall = false;
 
-	MatrixMultiply(mWorldMatrix, pViewProjViewportMatrix, mCumulativeMatrix);
+	MatrixMultiply(mWorldMatrix, setup.mViewProjViewport, mCumulativeMatrix);
 
 	__m128 center = _mm_set_ps(1.0f, mBBCenter.z, mBBCenter.y, mBBCenter.x);
 	__m128 mBBCenterOSxForm = TransformCoords(&center, mCumulativeMatrix);
     float w = mBBCenterOSxForm.m128_f32[3];
 	if( w > 1.0f )
 	{
-		float radiusDivW = radius / w;
-		float r2DivW2DivTanFov = radiusDivW / tanOfHalfFov;
-
-		mTooSmall = r2DivW2DivTanFov < (mOccludeeSizeThreshold * mOccludeeSizeThreshold) ?  true : false;
+		mTooSmall = radius < w * setup.radiusThreshold ?  true : false;
 	}
 	else
 	{
