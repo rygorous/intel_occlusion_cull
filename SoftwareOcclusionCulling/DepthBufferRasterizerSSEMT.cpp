@@ -514,20 +514,15 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 		__m128i sizeBig = _mm_cmpgt_epi32(sizeMin, _mm_set1_epi32(2*BlockSize));
 
 		// Edges again (batch-transpose!)
-		__m128i edgenmax[4], edgeoffs[4], edgecbmax[4], edgestepx[4], edgestepy[4];
+		__m128i edgenmax[4], edgeoffs[4], edgestepx[4], edgestepy[4];
 
-		if (!_mm_testc_si128(sizeBig, _mm_set1_epi32(-1))) // any small?
-		{
-			Transpose4x3(edgeoffs, e[0].getOffs(minX, minY), e[1].getOffs(minX, minY), e[2].getOffs(minX, minY));
-		}
+		__m128i whichX = _mm_blendv_epi8(minX, minXSnap, sizeBig);
+		__m128i whichY = _mm_blendv_epi8(minY, minYSnap, sizeBig);
+		Transpose4x3(edgeoffs, e[0].getOffs(whichX, whichY), e[1].getOffs(whichX, whichY), e[2].getOffs(whichX, whichY));
 
 		if (!_mm_testz_si128(sizeBig, sizeBig)) // any big?
 		{
-			__m128i cb0 = _mm_sub_epi32(e[0].getOffs(minXSnap, minYSnap), e[0].nmax);
-			__m128i cb1 = _mm_sub_epi32(e[1].getOffs(minXSnap, minYSnap), e[1].nmax);
-			__m128i cb2 = _mm_sub_epi32(e[2].getOffs(minXSnap, minYSnap), e[2].nmax);
 			Transpose4x3(edgenmax, e[0].nmax, e[1].nmax, e[2].nmax);
-			Transpose4x3(edgecbmax, cb0, cb1, cb2);
 			Transpose4x3(edgestepx, e[0].stepX, e[1].stepX, e[2].stepX);
 			Transpose4x3(edgestepy, e[0].stepY, e[1].stepY, e[2].stepY);
 		}
@@ -563,7 +558,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 
 				__m128i ex = _mm_slli_epi32(edgestepx[lane], BlockLog2);
 				__m128i ey = _mm_slli_epi32(edgestepy[lane], BlockLog2);
-				__m128i cbmaxr = edgecbmax[lane];
+				__m128i cbmaxr = _mm_sub_epi32(edgeoffs[lane], enmax);
 				float *pDepthRow = &pDepthBuffer[ly0 * mDepthPitch];
 
 				// Loop through block rows
