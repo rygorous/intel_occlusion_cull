@@ -173,14 +173,14 @@ bool CPUTFrustum::IsVisible(
 		// If not all negative, at least one plane rejected the box completely
 		if ( !_mm_testc_si128( _mm_castps_si128( dot ), _mm_castps_si128( signMask ) ) )
 		{
-			mNumFrustumCulledModels++;
+			//mNumFrustumCulledModels++;
 			return false;
 		}
 	}
 
     // Tested box against all six planes and none of the planes
     // had the full box outside.
-    mNumFrustumVisibleModels++;
+    //mNumFrustumVisibleModels++;
     return true;
 }
 
