@@ -152,25 +152,40 @@ void TransformedAABBoxSSE::TransformAABBox(__m128 *pXformedPos, const __m128 cum
 		__m128 mixConst = _mm_load_ps((const float *) mixVert[i]);
 		__m128 vertex = _mm_blendv_ps(minVert, maxVert, mixConst);
 
-		pXformedPos[i] = TransformCoords(&vertex, cumulativeMatrix);
-		float oneOverW = 1.0f/max(pXformedPos[i].m128_f32[3], 0.0000001f);
-		pXformedPos[i] = pXformedPos[i] * oneOverW;
-		pXformedPos[i].m128_f32[3] = oneOverW;
+		__m128 xformed = TransformCoords(&vertex, cumulativeMatrix);
+		__m128 clampedW = _mm_max_ps(_mm_set1_ps(0.0000001f), _mm_shuffle_ps(xformed, xformed, 0xff));
+		__m128 oneOverW = _mm_div_ps(_mm_set1_ps(1.0f), clampedW);
+		__m128 xformWith1 = _mm_insert_ps(xformed, _mm_set1_ps(1.0f), 0x30);
+		pXformedPos[i] = _mm_mul_ps(xformWith1, oneOverW);
 	}
 }
 
 void TransformedAABBoxSSE::Gather(vFloat4 pOut[3], UINT triId, const __m128 *pXformedPos)
 {
-	for(int lane = 0; lane < SSE; lane++)
+	for(int i = 0; i < 3; i++)
 	{
-		for(int i = 0; i < 3; i++)
-		{
-			UINT index = sBBIndexList[(triId * 3) + (lane * 3) + i];
-			pOut[i].X.m128_f32[lane] = pXformedPos[index].m128_f32[0];
-			pOut[i].Y.m128_f32[lane] = pXformedPos[index].m128_f32[1];
-			pOut[i].Z.m128_f32[lane] = pXformedPos[index].m128_f32[2];
-			pOut[i].W.m128_f32[lane] = pXformedPos[index].m128_f32[3];
-		}
+		UINT i0 = sBBIndexList[triId * 3 + 0 + i];
+		UINT i1 = sBBIndexList[triId * 3 + 3 + i];
+		UINT i2 = sBBIndexList[triId * 3 + 6 + i];
+		UINT i3 = sBBIndexList[triId * 3 + 9 + i];
+
+		// Load
+		__m128 a0 = pXformedPos[i0];
+		__m128 a1 = pXformedPos[i1];
+		__m128 a2 = pXformedPos[i2];
+		__m128 a3 = pXformedPos[i3];
+
+		// Pass 1
+		__m128 b0 = _mm_unpacklo_ps(a0, a2); // a0x a2x a0y a2y
+		__m128 b1 = _mm_unpacklo_ps(a1, a3); // a1x a3x a1y a3y
+		__m128 b2 = _mm_unpackhi_ps(a0, a2); // a0z a2z a0w a2w
+		__m128 b3 = _mm_unpackhi_ps(a1, a3); // a1z a3z a1w a3w
+
+		// Pass 2
+		pOut[i].X = _mm_unpacklo_ps(b0, b1); // a0x a1x a2x a3x
+		pOut[i].Y = _mm_unpackhi_ps(b0, b1); // a0y a1y a2y a3y
+		pOut[i].Z = _mm_unpacklo_ps(b2, b3); // a0z a1z a2z a3z
+		pOut[i].W = _mm_unpackhi_ps(b2, b3); // a0w a1w a2a a3w
 	}
 }
 

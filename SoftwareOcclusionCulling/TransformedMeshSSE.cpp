@@ -63,17 +63,32 @@ void TransformedMeshSSE::TransformVertices(__m128 *cumulativeMatrix,
 
 void TransformedMeshSSE::Gather(vFloat4 pOut[3], UINT triId, UINT numLanes)
 {
-	for(UINT l = 0; l < numLanes; l++)
+	UINT maxFetch = 3 * (numLanes - 1);
+
+	for(UINT i = 0; i < 3; i++)
 	{
-		for(UINT i = 0; i < 3; i++)
-		{
-			UINT index = mpIndices[(triId * 3) + (l * 3) + i];
-			pOut[i].X.m128_f32[l] = mpXformedPos[index].m128_f32[0];
-			pOut[i].Y.m128_f32[l] = mpXformedPos[index].m128_f32[1];
-			pOut[i].Z.m128_f32[l] = mpXformedPos[index].m128_f32[2];
-			pOut[i].W.m128_f32[l] = mpXformedPos[index].m128_f32[3];
-			
-		}
+		UINT i0 = mpIndices[triId*3 + 0 + i];
+		UINT i1 = mpIndices[triId*3 + min(3, maxFetch) + i];
+		UINT i2 = mpIndices[triId*3 + min(6, maxFetch) + i];
+		UINT i3 = mpIndices[triId*3 + min(9, maxFetch) + i];
+
+		// Load
+		__m128 a0 = mpXformedPos[i0];
+		__m128 a1 = mpXformedPos[i1];
+		__m128 a2 = mpXformedPos[i2];
+		__m128 a3 = mpXformedPos[i3];
+
+		// Pass 1
+		__m128 b0 = _mm_unpacklo_ps(a0, a2); // a0x a2x a0y a2y
+		__m128 b1 = _mm_unpacklo_ps(a1, a3); // a1x a3x a1y a3y
+		__m128 b2 = _mm_unpackhi_ps(a0, a2); // a0z a2z a0w a2w
+		__m128 b3 = _mm_unpackhi_ps(a1, a3); // a1z a3z a1w a3w
+
+		// Pass 2
+		pOut[i].X = _mm_unpacklo_ps(b0, b1); // a0x a1x a2x a3x
+		pOut[i].Y = _mm_unpackhi_ps(b0, b1); // a0y a1y a2y a3y
+		pOut[i].Z = _mm_unpacklo_ps(b2, b3); // a0z a1z a2z a3z
+		pOut[i].W = _mm_unpackhi_ps(b2, b3); // a0w a1w a2a a3w
 	}
 }
 
