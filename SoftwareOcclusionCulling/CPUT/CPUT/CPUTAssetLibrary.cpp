@@ -176,10 +176,13 @@ void *CPUTAssetLibrary::FindAsset(const cString &name, CPUTAssetListEntry *pList
     pServices->ResolveAbsolutePathAndFilename( nameIsFullPathAndFilename ? name : (mAssetSetDirectoryName + name), &absolutePathAndFilename);
     absolutePathAndFilename = nameIsFullPathAndFilename ? name : absolutePathAndFilename;
 
+	UINT hash = CPUTComputeHash( absolutePathAndFilename );
+
     while(NULL!=pList)
     {
         if(    pModel    == pList->pModel
             && meshIndex == pList->meshIndex
+			&& hash      == pList->hash
             && (0 == _wcsicmp( absolutePathAndFilename.data(), pList->name.data() ))
         )
         {
