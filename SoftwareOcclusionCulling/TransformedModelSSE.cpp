@@ -83,8 +83,7 @@ void TransformedModelSSE::CreateTransformedMeshes(CPUTModelDX11 *pModel)
 //------------------------------------------------------------------
 void TransformedModelSSE::IsVisible(CPUTCamera* pCamera)
 {
-	mpCPUTModel->GetBoundsWorldSpace(&mBBCenterWS, &mBBHalfWS);
-	mVisible = pCamera->mFrustum.IsVisible(mBBCenterWS, mBBHalfWS);
+	mVisible = pCamera->mFrustum.IsVisible(mpCPUTModel->mBoundingBoxCenterWorldSpace, mpCPUTModel->mBoundingBoxHalfWorldSpace);
 }
 
 //---------------------------------------------------------------------------------------------------

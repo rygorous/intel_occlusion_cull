@@ -116,8 +116,6 @@ class TransformedModelSSE : public HelperSSE
 		__m128 *mProjMatrix;
 		__m128 *mViewPortMatrix;
 				
-		float3 mBBCenterWS;
-		float3 mBBHalfWS;
 		bool mVisible;
 		bool mTooSmall;
 		float mOccluderSizeThreshold;
