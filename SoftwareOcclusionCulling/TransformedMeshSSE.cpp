@@ -198,46 +198,45 @@ void TransformedMeshSSE::BinTransformedTrianglesMT(UINT taskId,
 		Gather(xformedPos, index, numLanes);
 		
 		// TODO: Maybe convert to Fixed pt and store it once so that dont have to convert to fixedPt again during rasterization
-		vFxPt4 xFormedFxPtPos[3];
+		__m128i fixX[3], fixY[3];
 		for(int i = 0; i < 3; i++)
 		{
-			xFormedFxPtPos[i].X = _mm_cvtps_epi32(xformedPos[i].X);
-			xFormedFxPtPos[i].Y = _mm_cvtps_epi32(xformedPos[i].Y);
-			xFormedFxPtPos[i].Z = _mm_cvtps_epi32(xformedPos[i].Z);
-			xFormedFxPtPos[i].W = _mm_cvtps_epi32(xformedPos[i].W);
+			fixX[i] = _mm_cvtps_epi32(xformedPos[i].X);
+			fixY[i] = _mm_cvtps_epi32(xformedPos[i].Y);
 		}
 
 		// Compute triangle area
-		__m128i A1 = _mm_sub_epi32(xFormedFxPtPos[2].Y, xFormedFxPtPos[0].Y);
-		__m128i A2 = _mm_sub_epi32(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y);
-		__m128i B1 = _mm_sub_epi32(xFormedFxPtPos[0].X, xFormedFxPtPos[2].X);
-		__m128i B2 = _mm_sub_epi32(xFormedFxPtPos[1].X, xFormedFxPtPos[0].X);
+		__m128i A1 = _mm_sub_epi32(fixY[2], fixY[0]);
+		__m128i A2 = _mm_sub_epi32(fixY[0], fixY[1]);
+		__m128i B1 = _mm_sub_epi32(fixX[0], fixX[2]);
+		__m128i B2 = _mm_sub_epi32(fixX[1], fixX[0]);
 		__m128i triArea = _mm_sub_epi32(_mm_mullo_epi32(B2, A1), _mm_mullo_epi32(B1, A2));
 		__m128 oneOverTriArea = _mm_div_ps(_mm_set1_ps(1.0f), _mm_cvtepi32_ps(triArea));
 		
 		// Find bounding box for screen space triangle in terms of pixels
-		__m128i vStartX = Max(Min(Min(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(0));
-		__m128i vEndX   = Min(Max(Max(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(SCREENW - 1));
+		__m128i vStartX = Max(Min(Min(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(0));
+		__m128i vEndX   = Min(Max(Max(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(SCREENW - 1));
 
-        __m128i vStartY = Max(Min(Min(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(0));
-        __m128i vEndY   = Min(Max(Max(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(SCREENH - 1));
+        __m128i vStartY = Max(Min(Min(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(0));
+        __m128i vEndY   = Min(Max(Max(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(SCREENH - 1));
 
+		// Skip triangle if:
+		// 1. triArea <= 0  <=> 1 > triArea
+		// 2. Bounding box intersection with screen is empty
+		// 3. Any of the verts are behind near clip plane (oneOverW > 1.0)
+		__m128i culled	= _mm_cmpgt_epi32(_mm_set1_epi32(1), triArea);
+		__m128i emptyX	= _mm_cmpgt_epi32(vStartX, vEndX);
+		__m128i emptyY	= _mm_cmpgt_epi32(vStartY, vEndY);
+		__m128  maxW	= _mm_max_ps(_mm_max_ps(xformedPos[0].W, xformedPos[1].W), xformedPos[2].W);
+		__m128  nearClip = _mm_cmplt_ps(_mm_set1_ps(1.0f), maxW);
 
-		for(int i = 0; i < numLanes; i++)
+		__m128  skipTri	= _mm_or_ps(_mm_castsi128_ps(_mm_or_si128(emptyX, emptyY)), _mm_or_ps(_mm_castsi128_ps(culled), nearClip));
+		int skipMask	= _mm_movemask_ps(skipTri);
+
+		for(int i = 0; i < numLanes; i++, skipMask >>= 1)
 		{
-			// Skip triangle if area is zero 
-			if(triArea.m128i_i32[i] <= 0) continue;
-			if(vEndX.m128i_i32[i] < vStartX.m128i_i32[i]) continue;
-			if(vEndY.m128i_i32[i] < vStartY.m128i_i32[i]) continue;
-			
-			float oneOverW[3];
-			for(int j = 0; j < 3; j++)
-			{
-				oneOverW[j] = xformedPos[j].W.m128_f32[i];
-			}
-			
-			// Reject the triangle if any of its verts is behind the nearclip plane
-			if(oneOverW[0] > 1.0f || oneOverW[1] > 1.0f || oneOverW[2] > 1.0f) continue;
+			// Should we skip the tri?
+			if(skipMask & 1) continue;
 
 			// Convert bounding box in terms of pixels to bounding box in terms of tiles
 			int startX = max(vStartX.m128i_i32[i]/TILE_WIDTH_IN_PIXELS, 0);
