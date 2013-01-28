@@ -198,27 +198,27 @@ void TransformedMeshSSE::BinTransformedTrianglesMT(UINT taskId,
 		Gather(xformedPos, index, numLanes);
 		
 		// TODO: Maybe convert to Fixed pt and store it once so that dont have to convert to fixedPt again during rasterization
-		__m128i fixX[3], fixY[3];
-		for(int i = 0; i < 3; i++)
-		{
-			fixX[i] = _mm_cvtps_epi32(xformedPos[i].X);
-			fixY[i] = _mm_cvtps_epi32(xformedPos[i].Y);
-		}
+		__m128i fixX0 = _mm_cvtps_epi32(xformedPos[0].X);
+		__m128i fixY0 = _mm_cvtps_epi32(xformedPos[0].Y);
+		__m128i fixX1 = _mm_cvtps_epi32(xformedPos[1].X);
+		__m128i fixY1 = _mm_cvtps_epi32(xformedPos[1].Y);
+		__m128i fixX2 = _mm_cvtps_epi32(xformedPos[2].X);
+		__m128i fixY2 = _mm_cvtps_epi32(xformedPos[2].Y);
 
 		// Compute triangle area
-		__m128i A1 = _mm_sub_epi32(fixY[2], fixY[0]);
-		__m128i A2 = _mm_sub_epi32(fixY[0], fixY[1]);
-		__m128i B1 = _mm_sub_epi32(fixX[0], fixX[2]);
-		__m128i B2 = _mm_sub_epi32(fixX[1], fixX[0]);
+		__m128i A1 = _mm_sub_epi32(fixY2, fixY0);
+		__m128i A2 = _mm_sub_epi32(fixY0, fixY1);
+		__m128i B1 = _mm_sub_epi32(fixX0, fixX2);
+		__m128i B2 = _mm_sub_epi32(fixX1, fixX0);
 		__m128i triArea = _mm_sub_epi32(_mm_mullo_epi32(B2, A1), _mm_mullo_epi32(B1, A2));
 		__m128 oneOverTriArea = _mm_div_ps(_mm_set1_ps(1.0f), _mm_cvtepi32_ps(triArea));
 		
 		// Find bounding box for screen space triangle in terms of pixels
-		__m128i vStartX = Max(Min(Min(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(0));
-		__m128i vEndX   = Min(Max(Max(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(SCREENW - 1));
+		__m128i vStartX = Max(Min(Min(fixX0, fixX1), fixX2), _mm_set1_epi32(0));
+		__m128i vEndX   = Min(Max(Max(fixX0, fixX1), fixX2), _mm_set1_epi32(SCREENW - 1));
 
-        __m128i vStartY = Max(Min(Min(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(0));
-        __m128i vEndY   = Min(Max(Max(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(SCREENH - 1));
+        __m128i vStartY = Max(Min(Min(fixY0, fixY1), fixY2), _mm_set1_epi32(0));
+        __m128i vEndY   = Min(Max(Max(fixY0, fixY1), fixY2), _mm_set1_epi32(SCREENH - 1));
 
 		// Skip triangle if:
 		// 1. triArea <= 0  <=> 1 > triArea
