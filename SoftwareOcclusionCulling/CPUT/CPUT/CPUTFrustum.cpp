@@ -17,6 +17,18 @@
 #include "CPUTCamera.h"
 
 //-----------------------------------------------
+CPUTFrustum::CPUTFrustum()
+{
+	mPlanes = (float *) _aligned_malloc(4 * 2 * sizeof(__m128), sizeof(__m128));
+}
+
+//-----------------------------------------------
+CPUTFrustum::~CPUTFrustum()
+{
+	_aligned_free(mPlanes);
+}
+
+//-----------------------------------------------
 void CPUTFrustum::InitializeFrustum( CPUTCamera *pCamera )
 {
     InitializeFrustum(
@@ -100,6 +112,22 @@ void CPUTFrustum::InitializeFrustum
     mpNormal[3] = cross3(farBottom,   bottomRight).normalize(); // bottom
     mpNormal[4] = cross3(bottomRight, farRight).normalize();    // right
     mpNormal[5] = cross3(farRight,    farBottom).normalize();   // far clip plane
+
+	for (int i=0; i < 6; i++)
+	{
+		mPlanes[0*8 + i] = mpNormal[i].x;
+		mPlanes[1*8 + i] = mpNormal[i].y;
+		mPlanes[2*8 + i] = mpNormal[i].z;
+		mPlanes[3*8 + i] = -dot3(mpNormal[i], mpPosition[(i < 3) ? 0 : 6]);
+	}
+
+	for (int i=6; i < 8; i++)
+	{
+		mPlanes[0*8 + i] = 0;
+		mPlanes[1*8 + i] = 0;
+		mPlanes[2*8 + i] = 0;
+		mPlanes[3*8 + i] = -1.0f;
+	}
 }
 
 //-----------------------------------------------
@@ -107,51 +135,51 @@ bool CPUTFrustum::IsVisible(
     const float3 &center,
     const float3 &half
 ){
-    // TODO:  There are MUCH more efficient ways to do this.
-    float3 pBoundingBoxPosition[8];
-    pBoundingBoxPosition[0] = center + float3(  half.x,  half.y,  half.z );
-    pBoundingBoxPosition[1] = center + float3(  half.x,  half.y, -half.z );
-    pBoundingBoxPosition[2] = center + float3(  half.x, -half.y,  half.z );
-    pBoundingBoxPosition[3] = center + float3(  half.x, -half.y, -half.z );
-    pBoundingBoxPosition[4] = center + float3( -half.x,  half.y,  half.z );
-    pBoundingBoxPosition[5] = center + float3( -half.x,  half.y, -half.z );
-    pBoundingBoxPosition[6] = center + float3( -half.x, -half.y,  half.z );
-    pBoundingBoxPosition[7] = center + float3( -half.x, -half.y, -half.z );
+	UINT ii;
 
-    // Test each bounding box point against each of the six frustum planes.
-    // Note: we need a point on the plane to compute the distance to the plane.
-    // We only need two of our frustum's points to do this.  A corner vertex is on
-    // three of the six planes.  We need two of these corners to have a point
-    // on all six planes.
-    UINT pPointIndex[6] = {0,0,0,6,6,6};
-    UINT ii;
-    for( ii=0; ii<6; ii++ )
-    {
-        bool allEightPointsOutsidePlane = true;
-        float3 *pNormal = &mpNormal[ii];
-        float3 *pPlanePoint = &mpPosition[pPointIndex[ii]];
-        float3 planeToPoint;
-        float distanceToPlane;
-        UINT jj;
-        for( jj=0; jj<8; jj++ )
-        {
-            planeToPoint = pBoundingBoxPosition[jj] - *pPlanePoint;
-            distanceToPlane = dot3( *pNormal, planeToPoint );
-            if( distanceToPlane < 0.0f )
-            {
-                allEightPointsOutsidePlane = false;
-                break; // from for.  No point testing any more points against this plane.
-            }
-        }
-        if( allEightPointsOutsidePlane )
-        {
-            mNumFrustumCulledModels++;
-            return false;
-        }
-    }
+	__m128 centerX	= _mm_set1_ps( center.x );
+	__m128 centerY	= _mm_set1_ps( center.y );
+	__m128 centerZ	= _mm_set1_ps( center.z );
+	__m128 halfX	= _mm_set1_ps( half.x );
+	__m128 halfY	= _mm_set1_ps( half.y );
+	__m128 halfZ	= _mm_set1_ps( half.z );
 
-    // Tested all eight points against all six planes and none of the planes
-    // had all eight points outside.
+	__m128 signMask	= _mm_castsi128_ps( _mm_set1_epi32( 0x80000000 ) );
+
+	// Test the bounding box against 4 planes at a time
+	for( ii=0; ii<2; ii++ )
+	{
+		__m128 planesX	= _mm_load_ps( &mPlanes[0 * 8 + ii * 4] );
+		__m128 planesY	= _mm_load_ps( &mPlanes[1 * 8 + ii * 4] );
+		__m128 planesZ	= _mm_load_ps( &mPlanes[2 * 8 + ii * 4] );
+		__m128 planesW	= _mm_load_ps( &mPlanes[3 * 8 + ii * 4] );
+
+		// Sign for half[XYZ] so that dot product with plane normal would be maximal
+		__m128 halfXSgn	= _mm_xor_ps( halfX, _mm_and_ps( planesX, signMask ) );
+		__m128 halfYSgn = _mm_xor_ps( halfY, _mm_and_ps( planesY, signMask ) );
+		__m128 halfZSgn = _mm_xor_ps( halfZ, _mm_and_ps( planesZ, signMask ) );
+
+		// Bounding box corner to test (min corner)
+		__m128 cornerX	= _mm_sub_ps( centerX, halfXSgn );
+		__m128 cornerY	= _mm_sub_ps( centerY, halfYSgn );
+		__m128 cornerZ	= _mm_sub_ps( centerZ, halfZSgn );
+
+		// Dot product
+		__m128 dot = planesW;
+		dot = _mm_add_ps( dot, _mm_mul_ps( cornerX, planesX ) );
+		dot = _mm_add_ps( dot, _mm_mul_ps( cornerY, planesY ) );
+		dot = _mm_add_ps( dot, _mm_mul_ps( cornerZ, planesZ ) );
+
+		// If not all negative, at least one plane rejected the box completely
+		if ( !_mm_testc_si128( _mm_castps_si128( dot ), _mm_castps_si128( signMask ) ) )
+		{
+			mNumFrustumCulledModels++;
+			return false;
+		}
+	}
+
+    // Tested box against all six planes and none of the planes
+    // had the full box outside.
     mNumFrustumVisibleModels++;
     return true;
 }
