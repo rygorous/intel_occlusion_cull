@@ -58,6 +58,8 @@ class TransformedAABBoxSSE : public HelperSSE
 
 		float3 mBBCenter;
 		float3 mBBHalf;
+		float3 mBBCenterWS;
+		float3 mBBHalfWS;
 
 		void Gather(vFloat4 pOut[3], UINT triId);
 };

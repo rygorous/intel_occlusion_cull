@@ -60,6 +60,7 @@ void TransformedAABBoxSSE::CreateAABBVertexIndexList(CPUTModelDX11 *pModel)
 	mWorldMatrix[3] = _mm_loadu_ps(world + 12);
 
 	pModel->GetBoundsObjectSpace(&mBBCenter, &mBBHalf);
+	pModel->GetBoundsWorldSpace(&mBBCenterWS, &mBBHalfWS);
 
 	float3 min = mBBCenter - mBBHalf;
 	float3 max = mBBCenter + mBBHalf;
@@ -129,9 +130,6 @@ void TransformedAABBoxSSE::CreateAABBVertexIndexList(CPUTModelDX11 *pModel)
 //----------------------------------------------------------------
 void TransformedAABBoxSSE::IsInsideViewFrustum(CPUTCamera *pCamera)
 {
-	float3 mBBCenterWS;
-	float3 mBBHalfWS;
-	mpCPUTModel->GetBoundsWorldSpace(&mBBCenterWS, &mBBHalfWS);
 	mInsideViewFrustum = pCamera->mFrustum.IsVisible(mBBCenterWS, mBBHalfWS);
 }
 
