@@ -29,7 +29,6 @@ class TransformedAABBoxSSE : public HelperSSE
 		TransformedAABBoxSSE();
 		~TransformedAABBoxSSE();
 		void CreateAABBVertexIndexList(CPUTModelDX11 *pModel);
-		bool IsInsideViewFrustum(CPUTCamera *pCamera);
 		void TransformAABBoxAndDepthTest();
 
 		bool IsTooSmall(__m128 *pViewMatrix, __m128 *pProjMatrix, CPUTCamera *pCamera);
@@ -53,8 +52,6 @@ class TransformedAABBoxSSE : public HelperSSE
 
 		float3 mBBCenter;
 		float3 mBBHalf;
-		float3 mBBCenterWS;
-		float3 mBBHalfWS;
 
 		void Gather(vFloat4 pOut[3], UINT triId);
 };

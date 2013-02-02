@@ -85,7 +85,6 @@ void TransformedAABBoxSSE::CreateAABBVertexIndexList(CPUTModelDX11 *pModel)
 	mWorldMatrix[3] = _mm_loadu_ps(world + 12);
 
 	pModel->GetBoundsObjectSpace(&mBBCenter, &mBBHalf);
-	pModel->GetBoundsWorldSpace(&mBBCenterWS, &mBBHalfWS);
 
 	float3 min = mBBCenter - mBBHalf;
 	float3 max = mBBCenter + mBBHalf;
@@ -100,14 +99,6 @@ void TransformedAABBoxSSE::CreateAABBVertexIndexList(CPUTModelDX11 *pModel)
 	mpBBVertexList[5] = _mm_set_ps(1.0f, max.z, min.y, max.x);
 	mpBBVertexList[6] = _mm_set_ps(1.0f, max.z, min.y, min.x);
 	mpBBVertexList[7] = _mm_set_ps(1.0f, min.z, min.y, min.x);
-}
-
-//----------------------------------------------------------------
-// Determine is model is inside view frustum
-//----------------------------------------------------------------
-bool TransformedAABBoxSSE::IsInsideViewFrustum(CPUTCamera *pCamera)
-{
-	return pCamera->mFrustum.IsVisible(mBBCenterWS, mBBHalfWS);
 }
 
 //----------------------------------------------------------------------------
