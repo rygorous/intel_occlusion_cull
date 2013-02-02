@@ -75,7 +75,7 @@ void AABBoxRasterizerSSEMT::IsInsideViewFrustum(UINT taskId, UINT taskCount)
 
 	for(UINT i = start; i < end; i++)
 	{
-		mpTransformedAABBox[i].IsInsideViewFrustum(mpCamera);
+		mpBBoxVisible[i] = mpTransformedAABBox[i].IsInsideViewFrustum(mpCamera);
 	}
 }
 
@@ -129,7 +129,7 @@ void AABBoxRasterizerSSEMT::TransformAABBoxAndDepthTest(UINT taskId)
 		mpVisible[i] = false;
 		mpTransformedAABBox[i].SetVisible(&mpVisible[i]);
 		
-		if(mpTransformedAABBox[i].IsInsideViewFrustum() && !mpTransformedAABBox[i].IsTooSmall(mViewMatrix, mProjMatrix, mpCamera))
+		if(mpBBoxVisible[i] && !mpTransformedAABBox[i].IsTooSmall(mViewMatrix, mProjMatrix, mpCamera))
 		{
 			mpTransformedAABBox[i].TransformAABBox();
 			mpTransformedAABBox[i].RasterizeAndDepthTestAABBox(mpRenderTargetPixels);

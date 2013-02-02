@@ -20,6 +20,7 @@
 AABBoxRasterizerSSE::AABBoxRasterizerSSE()
 	: mNumModels(0),
 	  mpTransformedAABBox(NULL),
+	  mpBBoxVisible(NULL),
 	  mpNumTriangles(NULL),
 	  mpRenderTargetPixels(NULL),
 	  mpCamera(NULL),
@@ -44,6 +45,7 @@ AABBoxRasterizerSSE::~AABBoxRasterizerSSE()
 	_aligned_free(mProjMatrix);
 	SAFE_DELETE_ARRAY(mpVisible);
 	SAFE_DELETE_ARRAY(mpTransformedAABBox);
+	SAFE_DELETE_ARRAY(mpBBoxVisible);
 	SAFE_DELETE_ARRAY(mpNumTriangles);
 }
 
@@ -72,6 +74,7 @@ void AABBoxRasterizerSSE::CreateTransformedAABBoxes(CPUTAssetSet **pAssetSet, UI
 
 	mpVisible = new bool[mNumModels];
 	mpTransformedAABBox = new TransformedAABBoxSSE[mNumModels];
+	mpBBoxVisible = new bool[mNumModels];
 	mpNumTriangles = new UINT[mNumModels];
 	
 	for(UINT assetId = 0, modelId = 0; assetId < numAssetSets; assetId++)

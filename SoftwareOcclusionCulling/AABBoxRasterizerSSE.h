@@ -38,10 +38,7 @@ class AABBoxRasterizerSSE : public AABBoxRasterizer
 
 		inline void ResetInsideFrustum()
 		{
-			for(UINT i = 0; i < mNumModels; i++)
-			{
-				mpTransformedAABBox[i].SetInsideViewFrustum(true);
-			}
+			memset(mpBBoxVisible, 0, sizeof(bool) * mNumModels);
 		}
 
 		void SetViewProjMatrix(float4x4 *viewMatrix, float4x4 *projMatrix);
@@ -92,6 +89,7 @@ class AABBoxRasterizerSSE : public AABBoxRasterizer
 	protected:
 		UINT mNumModels;
 		TransformedAABBoxSSE *mpTransformedAABBox;
+		bool *mpBBoxVisible;
 		UINT *mpNumTriangles;
 		__m128 *mViewMatrix;
 		__m128 *mProjMatrix;

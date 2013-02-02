@@ -47,7 +47,6 @@ static const UINT sBBIndexList[AABB_INDICES] =
 TransformedAABBoxSSE::TransformedAABBoxSSE()
 	: mpCPUTModel(NULL),
 	  mVisible(NULL),
-	  mInsideViewFrustum(true),
 	  mOccludeeSizeThreshold(0.0f)
 {
 	mWorldMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
@@ -106,9 +105,9 @@ void TransformedAABBoxSSE::CreateAABBVertexIndexList(CPUTModelDX11 *pModel)
 //----------------------------------------------------------------
 // Determine is model is inside view frustum
 //----------------------------------------------------------------
-void TransformedAABBoxSSE::IsInsideViewFrustum(CPUTCamera *pCamera)
+bool TransformedAABBoxSSE::IsInsideViewFrustum(CPUTCamera *pCamera)
 {
-	mInsideViewFrustum = pCamera->mFrustum.IsVisible(mBBCenterWS, mBBHalfWS);
+	return pCamera->mFrustum.IsVisible(mBBCenterWS, mBBHalfWS);
 }
 
 //----------------------------------------------------------------------------
