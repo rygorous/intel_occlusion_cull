@@ -89,15 +89,11 @@ class AABBoxRasterizerSSE : public AABBoxRasterizer
 
 
 	protected:
-		struct WorldBBox
-		{
-			float3 mCenter;
-			float3 mHalf;
-		};
+		struct WorldBBoxPacket;
 
 		UINT mNumModels;
 		TransformedAABBoxSSE *mpTransformedAABBox;
-		WorldBBox *mpWorldBoxes;
+		WorldBBoxPacket *mpWorldBoxes;
 		bool *mpBBoxVisible;
 		UINT *mpNumTriangles;
 		__m128 *mViewMatrix;
