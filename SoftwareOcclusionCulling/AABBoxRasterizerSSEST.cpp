@@ -34,10 +34,7 @@ AABBoxRasterizerSSEST::~AABBoxRasterizerSSEST()
 void AABBoxRasterizerSSEST::IsInsideViewFrustum(CPUTCamera *pCamera)
 {
 	mpCamera = pCamera;
-	for(UINT i = 0; i < mNumModels; i++)
-	{
-		mpBBoxVisible[i] = mpTransformedAABBox[i].IsInsideViewFrustum(mpCamera);
-	}
+	CalcInsideFrustum(&pCamera->mFrustum, 0, mNumModels);
 }
 
 //------------------------------------------------------------------------------

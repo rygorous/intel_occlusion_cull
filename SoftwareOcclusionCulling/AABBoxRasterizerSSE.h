@@ -85,10 +85,19 @@ class AABBoxRasterizerSSE : public AABBoxRasterizer
 			return numCulledTris;
 		}
 
+		void CalcInsideFrustum(CPUTFrustum *pFrustum, UINT start, UINT end);
+
 
 	protected:
+		struct WorldBBox
+		{
+			float3 mCenter;
+			float3 mHalf;
+		};
+
 		UINT mNumModels;
 		TransformedAABBoxSSE *mpTransformedAABBox;
+		WorldBBox *mpWorldBoxes;
 		bool *mpBBoxVisible;
 		UINT *mpNumTriangles;
 		__m128 *mViewMatrix;

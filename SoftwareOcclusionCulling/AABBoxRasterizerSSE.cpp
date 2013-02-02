@@ -20,6 +20,7 @@
 AABBoxRasterizerSSE::AABBoxRasterizerSSE()
 	: mNumModels(0),
 	  mpTransformedAABBox(NULL),
+	  mpWorldBoxes(NULL),
 	  mpBBoxVisible(NULL),
 	  mpNumTriangles(NULL),
 	  mpRenderTargetPixels(NULL),
@@ -45,6 +46,7 @@ AABBoxRasterizerSSE::~AABBoxRasterizerSSE()
 	_aligned_free(mProjMatrix);
 	SAFE_DELETE_ARRAY(mpVisible);
 	SAFE_DELETE_ARRAY(mpTransformedAABBox);
+	SAFE_DELETE_ARRAY(mpWorldBoxes);
 	SAFE_DELETE_ARRAY(mpBBoxVisible);
 	SAFE_DELETE_ARRAY(mpNumTriangles);
 }
@@ -74,6 +76,7 @@ void AABBoxRasterizerSSE::CreateTransformedAABBoxes(CPUTAssetSet **pAssetSet, UI
 
 	mpVisible = new bool[mNumModels];
 	mpTransformedAABBox = new TransformedAABBoxSSE[mNumModels];
+	mpWorldBoxes = new WorldBBox[mNumModels];
 	mpBBoxVisible = new bool[mNumModels];
 	mpNumTriangles = new UINT[mNumModels];
 	
@@ -90,6 +93,7 @@ void AABBoxRasterizerSSE::CreateTransformedAABBoxes(CPUTAssetSet **pAssetSet, UI
 				pModel = (CPUTModelDX11*)pRenderNode;
 	
 				mpTransformedAABBox[modelId].CreateAABBVertexIndexList(pModel);
+				pModel->GetBoundsWorldSpace(&mpWorldBoxes[modelId].mCenter, &mpWorldBoxes[modelId].mHalf);
 				mpNumTriangles[modelId] = 0;
 				for(int meshId = 0; meshId < pModel->GetMeshCount(); meshId++)
 				{
@@ -181,4 +185,15 @@ void AABBoxRasterizerSSE::Render(CPUTAssetSet **pAssetSet,
 		}
 	}
 	mNumCulled =  mNumModels - count;
+}
+
+//------------------------------------------------------------------------
+// Calculate frustum culling state for a bunch of models
+//------------------------------------------------------------------------
+void AABBoxRasterizerSSE::CalcInsideFrustum(CPUTFrustum *pFrustum, UINT start, UINT end)
+{
+	for(UINT i = start; i < end; i++)
+	{
+		mpBBoxVisible[i] = pFrustum->IsVisible(mpWorldBoxes[i].mCenter, mpWorldBoxes[i].mHalf);
+	}
 }
