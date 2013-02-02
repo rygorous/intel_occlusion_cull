@@ -38,7 +38,10 @@ class AABBoxRasterizerSSE : public AABBoxRasterizer
 
 		inline void ResetInsideFrustum()
 		{
-			memset(mpBBoxVisible, 0, sizeof(bool) * mNumModels);
+			for(UINT i = 0; i < mNumModels; i++)
+			{
+				mpBBoxVisible[i] = true;
+			}
 		}
 
 		void SetViewProjMatrix(float4x4 *viewMatrix, float4x4 *projMatrix);
