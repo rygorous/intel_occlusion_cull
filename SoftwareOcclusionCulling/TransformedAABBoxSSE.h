@@ -56,7 +56,6 @@ class TransformedAABBoxSSE : public HelperSSE
 		float3 mBBCenter;
 		float3 mBBHalf;
 		bool   mInsideViewFrustum;
-		bool   mTooSmall;
 		float3 mBBCenterWS;
 		float3 mBBHalfWS;
 

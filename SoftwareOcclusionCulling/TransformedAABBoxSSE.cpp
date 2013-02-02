@@ -48,8 +48,7 @@ TransformedAABBoxSSE::TransformedAABBoxSSE()
 	: mpCPUTModel(NULL),
 	  mVisible(NULL),
 	  mInsideViewFrustum(true),
-	  mOccludeeSizeThreshold(0.0f),
-	  mTooSmall(false)
+	  mOccludeeSizeThreshold(0.0f)
 {
 	mWorldMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
 	mpBBVertexList = (__m128*)_aligned_malloc(sizeof(float) * 4 * AABB_VERTICES, 16);
@@ -120,7 +119,6 @@ bool TransformedAABBoxSSE::IsTooSmall(__m128 *pViewMatrix, __m128 *pProjMatrix, 
 	float radius = mBBHalf.lengthSq(); // Use length-squared to avoid sqrt().  Relative comparissons hold.
 	float fov = pCamera->GetFov();
 	float tanOfHalfFov = tanf(fov * 0.5f);
-	mTooSmall = false;
 
 	MatrixMultiply(mWorldMatrix, pViewMatrix, mCumulativeMatrix);
 	MatrixMultiply(mCumulativeMatrix, pProjMatrix, mCumulativeMatrix);
@@ -134,13 +132,10 @@ bool TransformedAABBoxSSE::IsTooSmall(__m128 *pViewMatrix, __m128 *pProjMatrix, 
 		float radiusDivW = radius / w;
 		float r2DivW2DivTanFov = radiusDivW / tanOfHalfFov;
 
-		mTooSmall = r2DivW2DivTanFov < (mOccludeeSizeThreshold * mOccludeeSizeThreshold) ?  true : false;
+		return r2DivW2DivTanFov < (mOccludeeSizeThreshold * mOccludeeSizeThreshold) ?  true : false;
 	}
-	else
-	{
-		mTooSmall = false;
-	}
-	return mTooSmall;
+
+	return false;
 }
 
 //----------------------------------------------------------------
