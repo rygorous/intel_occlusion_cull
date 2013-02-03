@@ -80,16 +80,6 @@ void TransformedAABBoxSSE::CreateAABBVertexIndexList(CPUTModelDX11 *pModel)
 	float3 bbHalf;
 	pModel->GetBoundsObjectSpace(&mBBCenter, &bbHalf);
 	mRadiusSq = pModel->mBoundingBoxHalfObjectSpace.lengthSq();
-
-	pModel->GetBoundsWorldSpace(&mBBWorldCenter, &mBBWorldHalf);
-}
-
-//----------------------------------------------------------------
-// Determine is model is inside view frustum
-//----------------------------------------------------------------
-bool TransformedAABBoxSSE::IsInsideViewFrustum(CPUTCamera *pCamera)
-{
-	return pCamera->mFrustum.IsVisible(mBBWorldCenter, mBBWorldHalf);
 }
 
 //----------------------------------------------------------------------------

@@ -73,10 +73,7 @@ void AABBoxRasterizerSSEMT::IsInsideViewFrustum(UINT taskId, UINT taskCount)
 		end   = start +  numModelsPerTask2;
 	}
 
-	for(UINT i = start; i < end; i++)
-	{
-		mpInsideViewFrustum[i] = mpTransformedAABBox[i].IsInsideViewFrustum(mpCamera);
-	}
+	CalcInsideViewFrustum(&mpCamera->mFrustum, start, end);
 }
 
 //-------------------------------------------------------------------------------

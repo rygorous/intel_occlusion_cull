@@ -17,9 +17,26 @@
 
 #include "AABBoxRasterizerSSE.h"
 
+struct AABBoxRasterizerSSE::WorldBBoxPacket
+{
+	__m128 mCenter[3];
+	__m128 mHalf[3];
+
+	inline void SetLane(UINT lane, const float3& center, const float3& half)
+	{
+		mCenter[0].m128_f32[lane] = center.x;
+		mCenter[1].m128_f32[lane] = center.y;
+		mCenter[2].m128_f32[lane] = center.z;
+		mHalf[0].m128_f32[lane] = half.x;
+		mHalf[1].m128_f32[lane] = half.y;
+		mHalf[2].m128_f32[lane] = half.z;
+	}
+};
+
 AABBoxRasterizerSSE::AABBoxRasterizerSSE()
 	: mNumModels(0),
 	  mpTransformedAABBox(NULL),
+	  mpWorldBBox(NULL),
 	  mpNumTriangles(NULL),
 	  mpRenderTargetPixels(NULL),
 	  mpCamera(NULL),
@@ -43,6 +60,7 @@ AABBoxRasterizerSSE::~AABBoxRasterizerSSE()
 {
 	_aligned_free(mViewMatrix);
 	_aligned_free(mProjMatrix);
+	_aligned_free(mpWorldBBox);
 	SAFE_DELETE_ARRAY(mpInsideViewFrustum);
 	SAFE_DELETE_ARRAY(mpVisible);
 	SAFE_DELETE_ARRAY(mpTransformedAABBox);
@@ -72,10 +90,16 @@ void AABBoxRasterizerSSE::CreateTransformedAABBoxes(CPUTAssetSet **pAssetSet, UI
 		}
 	}
 
+	UINT numPackets = (mNumModels + 3) / 4;
+
 	mpInsideViewFrustum = new bool[mNumModels];
 	mpVisible = new bool[mNumModels];
 	mpTransformedAABBox = new TransformedAABBoxSSE[mNumModels];
+	mpWorldBBox = (WorldBBoxPacket *) _aligned_malloc(sizeof(WorldBBoxPacket) * numPackets, 16);
 	mpNumTriangles = new UINT[mNumModels];
+
+	// Make sure world bbox array is zero-initialized
+	memset(mpWorldBBox, 0, sizeof(WorldBBoxPacket) * numPackets);
 	
 	for(UINT assetId = 0, modelId = 0; assetId < numAssetSets; assetId++)
 	{
@@ -88,6 +112,10 @@ void AABBoxRasterizerSSE::CreateTransformedAABBoxes(CPUTAssetSet **pAssetSet, UI
 			{
 				CPUTModelDX11 *pModel = (CPUTModelDX11*)pRenderNode;
 				pModel = (CPUTModelDX11*)pRenderNode;
+
+				float3 center, half;
+				pModel->GetBoundsWorldSpace(&center, &half);
+				mpWorldBBox[modelId / 4].SetLane(modelId % 4, center, half);
 	
 				mpTransformedAABBox[modelId].CreateAABBVertexIndexList(pModel);
 				mpNumTriangles[modelId] = 0;
@@ -186,4 +214,69 @@ void AABBoxRasterizerSSE::Render(CPUTAssetSet **pAssetSet,
 		}
 	}
 	mNumCulled =  mNumModels - count;
+}
+
+//------------------------------------------------------------------------
+// Calculate frustum culling state for a bunch of models
+//------------------------------------------------------------------------
+void AABBoxRasterizerSSE::CalcInsideViewFrustum(CPUTFrustum *pFrustum, UINT start, UINT end)
+{
+	// Packet start/end (rounding up)
+	UINT packetStart = (start + 3) / 4;
+	UINT packetEnd = (end + 3) / 4;
+
+	// Prepare plane equations
+	__m128 planeNormal[6][3];
+	__m128 planeNormalSign[6][3];
+	__m128 planeDist[6];
+	__m128 signMask = _mm_castsi128_ps(_mm_set1_epi32(0x80000000));
+	for(UINT i = 0; i < 6; i++)
+	{
+		for (UINT j = 0; j < 3; j++)
+		{
+			planeNormal[i][j] = _mm_set1_ps(pFrustum->mpNormal[i].f[j]);
+			planeNormalSign[i][j] = _mm_and_ps(planeNormal[i][j], signMask);
+		}
+
+		planeDist[i] = _mm_set1_ps(pFrustum->mPlanes[3*8 + i]);
+	}
+
+	// Loop over packets
+	bool * __restrict visible = mpInsideViewFrustum;
+	for(UINT i = packetStart; i < packetEnd; i++)
+	{
+		// Start assuming all 4 boxes are inside
+		__m128 inMask = _mm_castsi128_ps(_mm_set1_epi32(~0));
+
+		// Loop over planes
+		for (UINT j = 0; j < 6; j++)
+		{
+			// Sign for half[XYZ] so that dot product with plane normal would be maximal
+			__m128 halfSignX = _mm_xor_ps(mpWorldBBox[i].mHalf[0], planeNormalSign[j][0]);
+			__m128 halfSignY = _mm_xor_ps(mpWorldBBox[i].mHalf[1], planeNormalSign[j][1]);
+			__m128 halfSignZ = _mm_xor_ps(mpWorldBBox[i].mHalf[2], planeNormalSign[j][2]);
+
+			// Bounding box corner to test (min corner)
+			__m128 cornerX = _mm_sub_ps(mpWorldBBox[i].mCenter[0], halfSignX);
+			__m128 cornerY = _mm_sub_ps(mpWorldBBox[i].mCenter[1], halfSignY);
+			__m128 cornerZ = _mm_sub_ps(mpWorldBBox[i].mCenter[2], halfSignZ);
+
+			// Compute dot product
+			__m128 dot = planeDist[j];
+			dot = _mm_add_ps(dot, _mm_mul_ps(cornerX, planeNormal[j][0]));
+			dot = _mm_add_ps(dot, _mm_mul_ps(cornerY, planeNormal[j][1]));
+			dot = _mm_add_ps(dot, _mm_mul_ps(cornerZ, planeNormal[j][2]));
+
+			// The plane box is inside as long as the dot product is negative -> sign bit set
+			// So AND result together with current mask
+			inMask = _mm_and_ps(inMask, dot);
+		}
+
+		// Write the results for this packet
+		int packetMask = _mm_movemask_ps(inMask);
+		visible[i*4 + 0] = (packetMask >> 0) & 1;
+		visible[i*4 + 1] = (packetMask >> 1) & 1;
+		visible[i*4 + 2] = (packetMask >> 2) & 1;
+		visible[i*4 + 3] = (packetMask >> 3) & 1;
+	}
 }

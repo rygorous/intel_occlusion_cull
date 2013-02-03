@@ -37,7 +37,6 @@ class TransformedAABBoxSSE : public HelperSSE
 		TransformedAABBoxSSE();
 		~TransformedAABBoxSSE();
 		void CreateAABBVertexIndexList(CPUTModelDX11 *pModel);
-		bool IsInsideViewFrustum(CPUTCamera *pCamera);
 		void TransformAABBoxAndDepthTest();
 
 		void MakeCumulativeMatrix(__m128 cumulativeMatrix[4], const BoxTestSetup &setup);
@@ -48,9 +47,6 @@ class TransformedAABBoxSSE : public HelperSSE
 
 	private:
 		CPUTModelDX11 *mpCPUTModel;
-
-		float3 mBBWorldCenter;
-		float3 mBBWorldHalf;
 
 		float3 mBBCenter;
 		float  mRadiusSq;
