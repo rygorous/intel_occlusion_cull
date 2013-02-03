@@ -92,7 +92,7 @@ void AABBoxRasterizerSSE::CreateTransformedAABBoxes(CPUTAssetSet **pAssetSet, UI
 
 	UINT numPackets = (mNumModels + 3) / 4;
 
-	mpInsideViewFrustum = new bool[mNumModels];
+	mpInsideViewFrustum = new bool[numPackets * 4];
 	mpVisible = new bool[mNumModels];
 	mpTransformedAABBox = new TransformedAABBoxSSE[mNumModels];
 	mpWorldBBox = (WorldBBoxPacket *) _aligned_malloc(sizeof(WorldBBoxPacket) * numPackets, 16);

@@ -45,10 +45,9 @@ class AABBoxRasterizerSSE : public AABBoxRasterizer
 		}
 
 		void SetViewProjMatrix(float4x4 *viewMatrix, float4x4 *projMatrix);
-		inline void SetCPURenderTargetPixels(UINT *pRenderTargetPixels, UINT pitch)
+		inline void SetCPURenderTargetPixels(UINT *pRenderTargetPixels)
 		{
 			mpRenderTargetPixels = pRenderTargetPixels;
-			mDepthPitch = pitch;
 		}
 		inline void SetDepthTestTasks(UINT numTasks) {mNumDepthTestTasks = numTasks;}
 		inline void SetOccludeeSizeThreshold(float occludeeSizeThreshold)
@@ -101,7 +100,6 @@ class AABBoxRasterizerSSE : public AABBoxRasterizer
 		__m128 *mViewMatrix;
 		__m128 *mProjMatrix;
 		UINT *mpRenderTargetPixels;
-		UINT mDepthPitch;
 		CPUTCamera *mpCamera;
 		bool *mpInsideViewFrustum;
 		bool *mpVisible;

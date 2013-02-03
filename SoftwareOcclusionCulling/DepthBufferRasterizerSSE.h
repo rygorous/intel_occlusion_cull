@@ -40,10 +40,9 @@ class DepthBufferRasterizerSSE : public DepthBufferRasterizer, public HelperSSE
 		// Set the view and projection matrices
 		inline void SetViewProj(float4x4 *viewMatrix, float4x4 *projMatrix);
 		
-		inline void SetCPURenderTargetPixels(UINT *pRenderTargetPixels, UINT pitch)
+		inline void SetCPURenderTargetPixels(UINT *pRenderTargetPixels)
 		{
 			mpRenderTargetPixels = pRenderTargetPixels;
-			mDepthPitch = pitch;
 		}
 		
 		inline void SetCamera(CPUTCamera *pCamera) {mpCamera = pCamera;}
@@ -92,7 +91,6 @@ class DepthBufferRasterizerSSE : public DepthBufferRasterizer, public HelperSSE
 		__m128 *mViewMatrix;
 		__m128 *mProjMatrix;
 		UINT *mpRenderTargetPixels;
-		UINT mDepthPitch;
 		UINT mNumRasterized;
 		UINT *mpBin;				 // triangle index
 		USHORT *mpBinModel;			 // model index

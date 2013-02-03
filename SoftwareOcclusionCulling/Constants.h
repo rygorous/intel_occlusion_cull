@@ -89,9 +89,19 @@ static UINT StepX2(UINT x)
 	return x + 4;
 }
 
+static UINT StepX2n(UINT x, UINT n)
+{
+	return x + 4*n;
+}
+
 static UINT StepY2(UINT y)
 {
 	return y + SCREENW*2;
+}
+
+static UINT StepY2n(UINT y, UINT n)
+{
+	return y + SCREENW*2*n;
 }
 
 #else

@@ -245,8 +245,6 @@ void TransformedMeshSSE::BinTransformedTrianglesMT(UINT taskId,
 
 		__m128  skipTri	= _mm_or_ps(_mm_castsi128_ps(_mm_or_si128(emptyX, emptyY)), _mm_or_ps(_mm_castsi128_ps(culled), nearClip));
 		int skipMask	= _mm_movemask_ps(skipTri);
-			if(vEndX.m128i_i32[i] < vStartX.m128i_i32[i]) continue;
-			if(vEndY.m128i_i32[i] < vStartY.m128i_i32[i]) continue;
 
 		for(int i = 0; i < numLanes; i++, skipMask >>= 1)
 		{

@@ -94,7 +94,6 @@ private:
 	CPUTMaterialDX11	  *mpShowDepthBufMtrl;
 
 	unsigned char			*mpCPUDepthBuf;
-	UINT					 mDepthPitch;
 	ID3D11Texture2D         *mpCPURenderTarget;
 	ID3D11ShaderResourceView *mpCPUSRV;
 	ID3D11Texture2D         *mpBackBuffer;
