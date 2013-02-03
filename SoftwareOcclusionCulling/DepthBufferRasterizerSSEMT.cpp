@@ -245,7 +245,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 	UINT offset2 = YOFFSET2_MT * tileY + XOFFSET2_MT * tileX;
 	UINT numTrisInBin = mpNumTrisInBin[offset1 + bin];
 
-	vFloat4 xformedPos[3];
+	__m128 vertBuf[4][3];
 	bool done = false;
 	bool allBinsEmpty = true;
 	mNumRasterizedTris[taskId] = numTrisInBin;
@@ -274,7 +274,13 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			USHORT modelId = mpBinModel[offset2 + bin * MAX_TRIS_IN_BIN_MT + binIndex];
 			USHORT meshId = mpBinMesh[offset2 + bin * MAX_TRIS_IN_BIN_MT + binIndex];
 			UINT triIdx = mpBin[offset2 + bin * MAX_TRIS_IN_BIN_MT + binIndex];
-			mpTransformedModels1[modelId].Gather((float*)&xformedPos, meshId, triIdx, ii);
+
+			const TransformedMeshSSE *pMesh = &mpTransformedModels1[modelId].mpMeshes[meshId];
+			const __m128 *pVerts = pMesh->mpXformedPos;
+			const UINT *pInds = pMesh->mpIndices + triIdx*3;
+			for(UINT j=0; j < 3; j++)
+				vertBuf[ii][j] = pVerts[pInds[j]];
+
 			allBinsEmpty = false;
 			numSimdTris++; 
 
@@ -288,14 +294,29 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			return;
 		}
 
-		vFloat4* xformedvPos = (vFloat4*)&xformedPos;
-
-		// use fixed-point only for X and Y.  Avoid work for Z and W.
+		// transpose input vertex data
+		// and generate fixed-point X/Y
 		__m128i fixX[3], fixY[3];
+		__m128 Z[3];
 		for(int i = 0; i < 3; i++)
 		{
-			fixX[i] = _mm_cvtps_epi32(xformedvPos[i].X);
-			fixY[i] = _mm_cvtps_epi32(xformedvPos[i].Y);
+			__m128 v0 = vertBuf[0][i];
+			__m128 v1 = vertBuf[1][i];
+			__m128 v2 = vertBuf[2][i];
+			__m128 v3 = vertBuf[3][i];
+
+			__m128 a0 = _mm_unpacklo_ps(v0, v2);	// v0x v2x v0y v2y
+			__m128 a1 = _mm_unpacklo_ps(v1, v3);	// v1x v3x v1y v3y
+			__m128 a2 = _mm_unpackhi_ps(v0, v2);	// v0z v2z v0w v2w
+			__m128 a3 = _mm_unpackhi_ps(v1, v3);	// v1z v3z v1w v3w
+
+			__m128 x = _mm_unpacklo_ps(a0, a1);
+			__m128 y = _mm_unpackhi_ps(a0, a1);
+			__m128 z = _mm_unpacklo_ps(a2, a3);
+
+			fixX[i] = _mm_cvtps_epi32(x);
+			fixY[i] = _mm_cvtps_epi32(y);
+			Z[i]    = z;
 		}
 
 		// Fab(x, y) =     Ax       +       By     +      C              = 0
@@ -317,10 +338,8 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 		__m128 oneOverTriArea = _mm_div_ps(_mm_set1_ps(1.0f), _mm_cvtepi32_ps(triArea));
 
 		// Z setup
-		__m128 Z[3];
-		Z[0] = xformedvPos[0].Z;
-		Z[1] = _mm_mul_ps(_mm_sub_ps(xformedvPos[1].Z, xformedvPos[0].Z), oneOverTriArea);
-		Z[2] = _mm_mul_ps(_mm_sub_ps(xformedvPos[2].Z, xformedvPos[0].Z), oneOverTriArea);
+		Z[1] = _mm_mul_ps(_mm_sub_ps(Z[1], Z[0]), oneOverTriArea);
+		Z[2] = _mm_mul_ps(_mm_sub_ps(Z[2], Z[0]), oneOverTriArea);
 
 		// Use bounding box traversal strategy to determine which pixels to rasterize 
 		__m128i startX = _mm_and_si128(Max(Min(Min(fixX[0], fixX[1]), fixX[2]), _mm_set1_epi32(tileStartX)), _mm_set1_epi32(0xFFFFFFFE));

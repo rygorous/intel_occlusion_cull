@@ -122,6 +122,8 @@ class TransformedModelSSE : public HelperSSE
 
 		float4 mBBCenterOS;
 		float4 mBBHalfOS;
+
+	public:
 		TransformedMeshSSE *mpMeshes;
 		__m128 *mpXformedPos;
 };

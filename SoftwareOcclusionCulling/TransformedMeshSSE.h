@@ -59,7 +59,7 @@ class TransformedMeshSSE : public HelperSSE
 		inline void SetXformedPos(__m128 *pXformedPos){mpXformedPos = pXformedPos;}
 		inline void SetVertexStart(UINT vertexStart){mVertexStart = vertexStart;}
 
-	private:
+	public:
 		UINT mNumVertices;
 		UINT mNumIndices;
 		UINT mNumTriangles;
