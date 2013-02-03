@@ -55,9 +55,7 @@ void TransformedMeshSSE::TransformVertices(__m128 *cumulativeMatrix,
 	{
 		__m128 xformed = TransformCoords(&mpVertices[i].position, cumulativeMatrix);
 		__m128 clampedW = _mm_max_ps(_mm_set1_ps(0.0000001f), _mm_shuffle_ps(xformed, xformed, 0xff));
-		__m128 oneOverW = _mm_div_ps(_mm_set1_ps(1.0f), clampedW);
-		__m128 xformWith1 = _mm_insert_ps(xformed, _mm_set1_ps(1.0f), 0x30);
-		mpXformedPos[i] = _mm_mul_ps(xformWith1, oneOverW);
+		mpXformedPos[i] = _mm_div_ps(xformed, clampedW);
 	}
 }
 
@@ -150,14 +148,14 @@ void TransformedMeshSSE::BinTransformedTrianglesST(UINT taskId,
 			if(triArea.m128i_i32[i] <= 0) continue;
 			if(vEndX.m128i_i32[i] < vStartX.m128i_i32[i] || vEndY.m128i_i32[i] < vStartY.m128i_i32[i]) continue;
 			
-			float oneOverW[3];
+			float Z[3];
 			for(int j = 0; j < 3; j++)
 			{
-				oneOverW[j] = xformedPos[j].W.m128_f32[i];
+				Z[j] = xformedPos[j].Z.m128_f32[i];
 			}
 
 			// Reject the triangle if any of its verts is behind the nearclip plane
-			if(oneOverW[0] > 1.0f || oneOverW[1] > 1.0f || oneOverW[2] > 1.0f) continue;
+			if(Z[0] > 1.0f || Z[1] > 1.0f || Z[2] > 1.0f) continue;
 
 			// Convert bounding box in terms of pixels to bounding box in terms of tiles
 			int startX = max(vStartX.m128i_i32[i]/TILE_WIDTH_IN_PIXELS, 0);
@@ -238,12 +236,12 @@ void TransformedMeshSSE::BinTransformedTrianglesMT(UINT taskId,
 		// Skip triangle if:
 		// 1. triArea <= 0  <=> 1 > triArea
 		// 2. Bounding box intersection with screen is empty
-		// 3. Any of the verts are behind near clip plane (oneOverW > 1.0)
+		// 3. Any of the verts are behind near clip plane (Z > 1.0)
 		__m128i culled	= _mm_cmpgt_epi32(_mm_set1_epi32(1), triArea);
 		__m128i emptyX	= _mm_cmpgt_epi32(vStartX, vEndX);
 		__m128i emptyY	= _mm_cmpgt_epi32(vStartY, vEndY);
-		__m128  maxW	= _mm_max_ps(_mm_max_ps(xformedPos[0].W, xformedPos[1].W), xformedPos[2].W);
-		__m128  nearClip = _mm_cmplt_ps(_mm_set1_ps(1.0f), maxW);
+		__m128  maxZ	= _mm_max_ps(_mm_max_ps(xformedPos[0].Z, xformedPos[1].Z), xformedPos[2].Z);
+		__m128  nearClip = _mm_cmplt_ps(_mm_set1_ps(1.0f), maxZ);
 
 		__m128  skipTri	= _mm_or_ps(_mm_castsi128_ps(_mm_or_si128(emptyX, emptyY)), _mm_or_ps(_mm_castsi128_ps(culled), nearClip));
 		int skipMask	= _mm_movemask_ps(skipTri);
