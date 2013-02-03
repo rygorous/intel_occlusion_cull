@@ -144,9 +144,7 @@ void TransformedAABBoxSSE::TransformAABBox(__m128 *pXformedPos, const __m128 cum
 
 		__m128 xformed = TransformCoords(&vertex, cumulativeMatrix);
 		__m128 clampedW = _mm_max_ps(_mm_set1_ps(0.0000001f), _mm_shuffle_ps(xformed, xformed, 0xff));
-		__m128 oneOverW = _mm_div_ps(_mm_set1_ps(1.0f), clampedW);
-		__m128 xformWith1 = _mm_insert_ps(xformed, _mm_set1_ps(1.0f), 0x30);
-		pXformedPos[i] = _mm_mul_ps(xformWith1, oneOverW);
+		pXformedPos[i] = _mm_div_ps(xformed, clampedW);
 	}
 }
 
@@ -241,21 +239,15 @@ bool TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 		__m128i startY = _mm_and_si128(Max(Min(Min(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(0)), _mm_set1_epi32(0xFFFFFFFE));
 		__m128i endY   = Min(Max(Max(fixY[0], fixY[1]), fixY[2]), _mm_set1_epi32(SCREENH-1));
 
-		for(int vv = 0; vv < 3; vv++) 
-		{
-            // If W (holding 1/w in our case) is not between 0 and 1,
-            // then vertex is behind near clip plane (1.0 in our case.
-            // If W < 1, then verify 1/W > 1 (for W>0), and 1/W < 0 (for W < 0).
-		    __m128 nearClipMask0 = _mm_cmple_ps(xformedPos[vv].W, _mm_set1_ps(0.0f));
-		    __m128 nearClipMask1 = _mm_cmpge_ps(xformedPos[vv].W, _mm_set1_ps(1.0f));
-            __m128 nearClipMask  = _mm_or_ps(nearClipMask0, nearClipMask1);
+		// If Z is larger than 1, then the vertex is behind the near clip plane.
+		__m128	v0near	= _mm_cmpnle_ps(xformedPos[0].Z, _mm_set1_ps(1.0f));
+		__m128	v1near	= _mm_cmpnle_ps(xformedPos[1].Z, _mm_set1_ps(1.0f));
+		__m128	v2near	= _mm_cmpnle_ps(xformedPos[2].Z, _mm_set1_ps(1.0f));
 
-			if(!_mm_test_all_zeros(*(__m128i*)&nearClipMask, *(__m128i*)&nearClipMask))
-			{
-                // All four vertices are behind the near plane (we're processing four triangles at a time w/ SSE)
-                return true;
-			}
-		}
+		// If, for any tri, any of the vertices are behind the near plane, bail
+		__m128	vnear	= _mm_or_ps(_mm_or_ps(v0near, v1near), v2near);
+		if (_mm_movemask_ps(vnear))
+			return true;
 
 		// Now we have 4 triangles set up.  Rasterize them each individually.
         for(int lane=0; lane < SSE; lane++)
