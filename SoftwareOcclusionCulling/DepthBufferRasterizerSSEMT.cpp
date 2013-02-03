@@ -402,7 +402,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			for(UINT ofs_y = ofs_y0; ofs_y <= ofs_y1; ofs_y = StepY2(ofs_y))
 			{
 				// Compute barycentric coordinates 
-				float *pDepth = &pDepthBuffer[ofs_y];
+				float * __restrict pDepth = &pDepthBuffer[ofs_y];
 				__m128i beta = _mm_add_epi32(aa1Col, bb1Row);
 				__m128i gama = _mm_add_epi32(aa2Col, bb2Row);
 				__m128i alpha = _mm_sub_epi32(_mm_sub_epi32(sum, beta), gama);
