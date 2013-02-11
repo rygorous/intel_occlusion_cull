@@ -16,6 +16,10 @@
 #include "SoftwareOcclusionCulling.h"
 #include "CPUTRenderTarget.h"
 
+#include <numeric>
+
+#define BENCHMARK
+
 const UINT SHADOW_WIDTH_HEIGHT = 256;
 
 // set file to open
@@ -28,6 +32,58 @@ extern char *gpDefaultShaderSource;
 
 float gFarClipDistance = 2000.0f;
 int gVisualizeDepthBuffer = 0;
+
+#ifdef BENCHMARK
+
+static void dprintf(const char *fmt, ...)
+{
+	char buf[2048];
+
+	va_list arg;
+	va_start(arg, fmt);
+	vsprintf_s(buf, fmt, arg);
+	va_end(arg);
+
+	OutputDebugStringA(buf);
+}
+
+// Run statistics
+class RunStatistics
+{
+	std::vector<float> values;
+
+public:
+	void record(float val)
+	{
+		values.push_back(val);
+	}
+
+	void summarize()
+	{
+		size_t count = values.size();
+		if (count < 2)
+			return;
+
+		// Print min/max and different percentiles
+		std::sort(values.begin(), values.end());
+
+		static const char *statname[5] = { "min", "25th", "median", "75th", "max" };
+		for (int i=0; i < 5; i++)
+			dprintf("  %s=%.3fms", statname[i], values[i * (count - 1) / 4]);
+
+		// Mean and standard deviation
+		double mean = std::accumulate(values.begin(), values.end(), 0.0) / count;
+		auto accum_var = [mean](double sum, double x) -> double { double d = x - mean; return sum + d*d; };
+		double varsum = std::accumulate(values.begin(), values.end(), 0.0, accum_var);
+		double sdev = sqrt(varsum / (count - 1.0));
+
+		dprintf("\n  mean=%.3fms sdev=%.3fms\n", mean, sdev);
+	}
+};
+
+static RunStatistics g_renderTime, g_testTime;
+
+#endif
 
 // Handle OnCreation events
 //-----------------------------------------------------------------------------
@@ -866,6 +922,31 @@ void MySample::Render(double deltaSeconds)
 
 	swprintf_s(&string[0], CPUT_MAX_STRING_LENGTH, _L("Number of draw calls: \t\t %d"), mNumDrawCalls);
 	mpDrawCallsText->SetText(string);
+
+#ifdef BENCHMARK
+	// Accumulate statistics over a number of frames
+	static const int initialDelay = 10; // give it a few frames to settle
+	static const int sampleLen = 600;
+
+	static int frameCount = 0;
+	int frame = frameCount++;
+
+	if (frame >= initialDelay)
+	{
+		g_renderTime.record((float) (mRasterizeTime * 1000.0f));
+		g_testTime.record((float) (mDepthTestTime * 1000.0f));
+
+		if (frame >= initialDelay + sampleLen)
+		{
+			dprintf("Render time:\n");
+			g_renderTime.summarize();
+			dprintf("Test time:\n");
+			g_testTime.summarize();
+
+			exit(1);
+		}
+	}
+#endif
 	
     CPUTDrawGUI();
 }
