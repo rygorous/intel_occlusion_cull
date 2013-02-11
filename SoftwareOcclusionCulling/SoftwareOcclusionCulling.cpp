@@ -931,7 +931,7 @@ void MySample::Render(double deltaSeconds)
 
 #ifdef BENCHMARK
 	// Accumulate statistics over a number of frames
-	static const int initialDelay = 10; // give it a few frames to settle
+	static const int initialDelay = 60; // give it a few frames to settle
 	static const int sampleLen = 600;
 
 	static int frameCount = 0;
