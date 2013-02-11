@@ -1,0 +1,13 @@
+Debug
+Release
+Profile
+ipch
+lib
+x64
+*.exe
+*.ilk
+*.pdb
+*.suo
+*.sdf
+*.opensdf
+*.vcxproj.user
