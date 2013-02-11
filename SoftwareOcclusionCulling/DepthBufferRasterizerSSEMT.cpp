@@ -423,11 +423,9 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), zz[2]));
 
 					__m128 previousDepthValue = *(__m128*)&pDepthBuffer[idx];
+					__m128 mergedDepth = _mm_max_ps(depth, previousDepthValue);
+					depth = _mm_blendv_ps(mergedDepth, previousDepthValue, _mm_castsi128_ps(mask));
 
-					__m128 depthMask = _mm_cmpge_ps(depth, previousDepthValue);
-					__m128i finalMask = _mm_andnot_si128(mask, _mm_castps_si128(depthMask));
-										
-					depth = _mm_blendv_ps(previousDepthValue, depth, _mm_castsi128_ps(finalMask));
 					_mm_store_ps(&pDepthBuffer[idx], depth);
 				}//for each column											
 			}// for each row
