@@ -73,7 +73,7 @@ public:
 		// Print min/max and different percentiles
 		std::sort(values.begin(), values.end());
 
-		static const char *statname[5] = { "min", "25th", "median", "75th", "max" };
+		static const char *statname[5] = { "min", "25th", "med", "75th", "max" };
 		for (int i=0; i < 5; i++)
 			dprintf("  %s=%.3fms", statname[i], values[i * (count - 1) / 4]);
 
