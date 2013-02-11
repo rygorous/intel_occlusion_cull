@@ -19,8 +19,6 @@
 
 #include "CPUTMath.h"
 
-extern int gVisualizeDepthBuffer;
-
 #define PI 3.1415926535f
 
 const int SCREENW = 1280;

@@ -100,6 +100,15 @@
     <None Include="Media\Castle\Material\BoundingBox.mtl">
       <Filter>Media\Material</Filter>
     </None>
+    <None Include="Media\Shader\showDepthBuf.fx">
+      <Filter>Media\Shader</Filter>
+    </None>
+    <None Include="Media\Shader\showDepthBuf.rs">
+      <Filter>Media\Shader</Filter>
+    </None>
+    <None Include="Media\Material\showDepthBuf.mtl">
+      <Filter>Media\Material</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h">
