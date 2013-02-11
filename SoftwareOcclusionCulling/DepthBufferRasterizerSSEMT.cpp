@@ -344,9 +344,8 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			}
 
 			__m128 oneOverTotalArea = _mm_set1_ps(oneOverTriArea.m128_f32[lane]);
-			zz[0] *= oneOverTotalArea;
-			zz[1] *= oneOverTotalArea;
-			zz[2] *= oneOverTotalArea;
+			zz[1] = (zz[1] - zz[0]) * oneOverTotalArea;
+			zz[2] = (zz[2] - zz[0]) * oneOverTotalArea;
 			
 			int startXx = startX.m128i_i32[lane];
 			int endXx	= endX.m128i_i32[lane];
@@ -419,7 +418,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 					}
 					
 					// Compute barycentric-interpolated depth
-			        __m128 depth = _mm_mul_ps(_mm_cvtepi32_ps(alpha), zz[0]);
+			        __m128 depth = zz[0];
 					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), zz[1]));
 					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), zz[2]));
 
