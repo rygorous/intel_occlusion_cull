@@ -385,22 +385,25 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			__m128i bb1Row = _mm_add_epi32(_mm_mullo_epi32(bb1, row), cc1);
 			__m128i bb2Row = _mm_add_epi32(_mm_mullo_epi32(bb2, row), cc2);
 
+			__m128i sum0Row = _mm_add_epi32(aa0Col, bb0Row);
+			__m128i sum1Row = _mm_add_epi32(aa1Col, bb1Row);
+			__m128i sum2Row = _mm_add_epi32(aa2Col, bb2Row);
+
 			__m128i bb0Inc = _mm_slli_epi32(bb0, 1);
 			__m128i bb1Inc = _mm_slli_epi32(bb1, 1);
 			__m128i bb2Inc = _mm_slli_epi32(bb2, 1);
 
 			for(int r = startYy; r < endYy; r += 2,
-											row  = _mm_add_epi32(row, _mm_set1_epi32(2)),
 											rowIdx = rowIdx + 2 * SCREENW,
-											bb0Row = _mm_add_epi32(bb0Row, bb0Inc),
-											bb1Row = _mm_add_epi32(bb1Row, bb1Inc),
-											bb2Row = _mm_add_epi32(bb2Row, bb2Inc))
+											sum0Row = _mm_add_epi32(sum0Row, bb0Inc),
+											sum1Row = _mm_add_epi32(sum1Row, bb1Inc),
+											sum2Row = _mm_add_epi32(sum2Row, bb2Inc))
 			{
 				// Compute barycentric coordinates 
 				int idx = rowIdx;
-				__m128i alpha = _mm_add_epi32(aa0Col, bb0Row);
-				__m128i beta = _mm_add_epi32(aa1Col, bb1Row);
-				__m128i gama = _mm_add_epi32(aa2Col, bb2Row);
+				__m128i alpha = sum0Row;
+				__m128i beta = sum1Row;
+				__m128i gama = sum2Row;
 
 				for(int c = startXx; c < endXx; c += 2,
 												idx += 4,
