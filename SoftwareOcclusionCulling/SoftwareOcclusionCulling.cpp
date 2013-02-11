@@ -19,6 +19,7 @@
 #include <numeric>
 
 #define BENCHMARK
+#define BENCHMARK_VTUNE
 
 const UINT SHADOW_WIDTH_HEIGHT = 256;
 
@@ -34,6 +35,11 @@ float gFarClipDistance = 2000.0f;
 int gVisualizeDepthBuffer = 0;
 
 #ifdef BENCHMARK
+
+#ifdef BENCHMARK_VTUNE
+#include "ittnotify.h"
+#pragma comment(lib, "libittnotify.lib")
+#endif
 
 static void dprintf(const char *fmt, ...)
 {
@@ -931,6 +937,11 @@ void MySample::Render(double deltaSeconds)
 	static int frameCount = 0;
 	int frame = frameCount++;
 
+#ifdef BENCHMARK_VTUNE
+	if (frame == initialDelay)
+		__itt_resume();
+#endif
+
 	if (frame >= initialDelay)
 	{
 		g_renderTime.record((float) (mRasterizeTime * 1000.0f));
@@ -938,6 +949,10 @@ void MySample::Render(double deltaSeconds)
 
 		if (frame >= initialDelay + sampleLen)
 		{
+#ifdef BENCHMARK_VTUNE
+			__itt_pause();
+#endif
+
 			dprintf("Render time:\n");
 			g_renderTime.summarize();
 			dprintf("Test time:\n");
