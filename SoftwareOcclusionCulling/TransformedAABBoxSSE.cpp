@@ -304,20 +304,26 @@ bool TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 			__m128i bb1Row = _mm_add_epi32(_mm_mullo_epi32(bb1, row), cc1);
 			__m128i bb2Row = _mm_add_epi32(_mm_mullo_epi32(bb2, row), cc2);
 
+			__m128i sum1Row = _mm_add_epi32(aa1Col, bb1Row);
+			__m128i sum2Row = _mm_add_epi32(aa2Col, bb2Row);
+			__m128i sum0Row = _mm_sub_epi32(_mm_sub_epi32(sum, sum1Row), sum2Row);
+
 			__m128i bb1Inc = _mm_slli_epi32(bb1, 1);
 			__m128i bb2Inc = _mm_slli_epi32(bb2, 1);
+			__m128i bb0Dec = _mm_add_epi32(bb1Inc, bb2Inc);
 
 			// Incrementally compute Fab(x, y) for all the pixels inside the bounding box formed by (startX, endX) and (startY, endY)
 			for(UINT ofs_y = ofs_y0; ofs_y <= ofs_y1; ofs_y = StepY2(ofs_y))
 			{
 				// Compute barycentric coordinates 
 				float *pDepth = &pDepthBuffer[ofs_y];
-				__m128i beta = _mm_add_epi32(aa1Col, bb1Row);
-				__m128i gama = _mm_add_epi32(aa2Col, bb2Row);
-				__m128i alpha = _mm_sub_epi32(_mm_sub_epi32(sum, beta), gama);
+				__m128i alpha = sum0Row;
+				__m128i beta = sum1Row;
+				__m128i gama = sum2Row;
 
-				bb1Row = _mm_add_epi32(bb1Row, bb1Inc);
-				bb2Row = _mm_add_epi32(bb2Row, bb2Inc);
+				sum0Row = _mm_sub_epi32(sum0Row, bb0Dec);
+				sum1Row = _mm_add_epi32(sum1Row, bb1Inc);
+				sum2Row = _mm_add_epi32(sum2Row, bb2Inc);
 
 				for(UINT ofs_x = ofs_x0; ofs_x <= ofs_x1; ofs_x = StepX2(ofs_x))
 				{
@@ -332,11 +338,12 @@ bool TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 					beta  = _mm_add_epi32(beta, aa1Inc);
 					gama  = _mm_add_epi32(gama, aa2Inc);
 
+					mask = _mm_andnot_si128(mask, _mm_set1_epi32(0x80000000));
+
 					// Depth test
 					__m128 previousDepthValue = _mm_load_ps(&pDepth[ofs_x]);
 					__m128 depthMask  = _mm_cmpge_ps( depth, previousDepthValue);
-					__m128i finalMask = _mm_andnot_si128( mask, _mm_castps_si128(depthMask));
-					if(!_mm_test_all_zeros(finalMask, finalMask))
+					if(!_mm_testz_si128(mask, _mm_castps_si128(depthMask)))
 					{
 						return true; // early exit
 					}
