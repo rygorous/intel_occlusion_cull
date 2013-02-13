@@ -318,10 +318,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 		VecS32 C2 = xFormedFxPtPos[0].X * xFormedFxPtPos[1].Y - xFormedFxPtPos[1].X * xFormedFxPtPos[0].Y;
 
 		// Compute triangle area
-		VecS32 triArea = A0 * xFormedFxPtPos[0].X;
-		triArea += B0 * xFormedFxPtPos[0].Y;
-		triArea += C0;
-
+		VecS32 triArea = B2 * A1 - B1 * A2;
 		VecF32 oneOverTriArea = VecF32(1.0f) / itof(triArea);
 
 		// Use bounding box traversal strategy to determine which pixels to rasterize 
