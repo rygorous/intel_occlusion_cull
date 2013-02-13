@@ -368,27 +368,21 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			VecS32 aa1Inc = shiftl<1>(aa1);
 			VecS32 aa2Inc = shiftl<1>(aa2);
 
-			// Tranverse pixels in 2x2 blocks and store 2x2 pixel quad depthscontiguously in memory ==> 2*X
-			// This method provides better perfromance
-			int rowIdx = (startYy * SCREENW + 2 * startXx);
-
-			VecS32 col = colOffset + VecS32(startXx);
-			VecS32 aa0Col = aa0 * col;
-			VecS32 aa1Col = aa1 * col;
-			VecS32 aa2Col = aa2 * col;
-
-			VecS32 row = rowOffset + VecS32(startYy);
-			VecS32 bb0Row = bb0 * row + cc0;
-			VecS32 bb1Row = bb1 * row + cc1;
-			VecS32 bb2Row = bb2 * row + cc2;
-
-			VecS32 sum0Row = aa0Col + bb0Row;
-			VecS32 sum1Row = aa1Col + bb1Row;
-			VecS32 sum2Row = aa2Col + bb2Row;
-
 			VecS32 bb0Inc = shiftl<1>(bb0);
 			VecS32 bb1Inc = shiftl<1>(bb1);
 			VecS32 bb2Inc = shiftl<1>(bb2);
+
+			// Tranverse pixels in 2x2 blocks and store 2x2 pixel quad depths
+			// contiguously in memory ==> 2*X
+			// This method provides better perfromance
+			int rowIdx = (startYy * SCREENW + 2 * startXx);
+
+			VecS32 col = VecS32(startXx) + colOffset;
+			VecS32 row = VecS32(startYy) + rowOffset;
+
+			VecS32 sum0Row = aa0 * col + bb0 * row + cc0;
+			VecS32 sum1Row = aa1 * col + bb1 * row + cc1;
+			VecS32 sum2Row = aa2 * col + bb2 * row + cc2;
 
 			for(int r = startYy; r < endYy; r += 2,
 											rowIdx = rowIdx + 2 * SCREENW,
