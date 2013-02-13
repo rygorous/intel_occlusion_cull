@@ -67,10 +67,10 @@ void TransformedMeshSSE::Gather(vFloat4 pOut[3], UINT triId, UINT numLanes)
 		for(UINT i = 0; i < 3; i++)
 		{
 			UINT index = mpIndices[(triId * 3) + (l * 3) + i];
-			pOut[i].X.m128_f32[l] = mpXformedPos[index].m128_f32[0];
-			pOut[i].Y.m128_f32[l] = mpXformedPos[index].m128_f32[1];
-			pOut[i].Z.m128_f32[l] = mpXformedPos[index].m128_f32[2];
-			pOut[i].W.m128_f32[l] = mpXformedPos[index].m128_f32[3];
+			pOut[i].X.lane[l] = mpXformedPos[index].m128_f32[0];
+			pOut[i].Y.lane[l] = mpXformedPos[index].m128_f32[1];
+			pOut[i].Z.lane[l] = mpXformedPos[index].m128_f32[2];
+			pOut[i].W.lane[l] = mpXformedPos[index].m128_f32[3];
 			
 		}
 	}
@@ -106,51 +106,50 @@ void TransformedMeshSSE::BinTransformedTrianglesST(UINT taskId,
 		vFxPt4 xFormedFxPtPos[3];
 		for(int i = 0; i < 3; i++)
 		{
-			xFormedFxPtPos[i].X = _mm_cvtps_epi32(xformedPos[i].X);
-			xFormedFxPtPos[i].Y = _mm_cvtps_epi32(xformedPos[i].Y);
-			xFormedFxPtPos[i].Z = _mm_cvtps_epi32(xformedPos[i].Z);
-			xFormedFxPtPos[i].W = _mm_cvtps_epi32(xformedPos[i].W);
+			xFormedFxPtPos[i].X = ftoi_round(xformedPos[i].X);
+			xFormedFxPtPos[i].Y = ftoi_round(xformedPos[i].Y);
+			xFormedFxPtPos[i].Z = ftoi_round(xformedPos[i].Z);
+			xFormedFxPtPos[i].W = ftoi_round(xformedPos[i].W);
 		}
 
 		// Compute triangle are
-		__m128i A0 = _mm_sub_epi32(xFormedFxPtPos[1].Y, xFormedFxPtPos[2].Y);
-		__m128i B0 = _mm_sub_epi32(xFormedFxPtPos[2].X, xFormedFxPtPos[1].X);
-		__m128i C0 = _mm_sub_epi32(_mm_mullo_epi32(xFormedFxPtPos[1].X, xFormedFxPtPos[2].Y), _mm_mullo_epi32(xFormedFxPtPos[2].X, xFormedFxPtPos[1].Y));
+		VecS32 A0 = xFormedFxPtPos[1].Y - xFormedFxPtPos[2].Y;
+		VecS32 B0 = xFormedFxPtPos[2].X - xFormedFxPtPos[1].X;
+		VecS32 C0 = xFormedFxPtPos[1].X * xFormedFxPtPos[2].Y - xFormedFxPtPos[2].X * xFormedFxPtPos[1].Y;
 
-		__m128i triArea = _mm_mullo_epi32(A0, xFormedFxPtPos[0].X);
-		triArea = _mm_add_epi32(triArea, _mm_mullo_epi32(B0, xFormedFxPtPos[0].Y));
-		triArea = _mm_add_epi32(triArea, C0);
+		VecS32 triArea = A0 * xFormedFxPtPos[0].X;
+		triArea += B0 * xFormedFxPtPos[0].Y;
+		triArea += C0;
+
+		VecF32 oneOverTriArea = VecF32(1.0f) / itof(triArea);
 
 		// Find bounding box for screen space triangle in terms of pixels
-		__m128 oneOverTriArea = _mm_div_ps(_mm_set1_ps(1.0f), _mm_cvtepi32_ps(triArea));
+		VecS32 vStartX = vmax(vmin(vmin(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), VecS32(0));
+		VecS32 vEndX   = vmin(vmax(vmax(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X) + VecS32(1), VecS32(SCREENW));
 
-		__m128i vStartX = Max(Min(Min(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(0));
-		__m128i vEndX   = Min(_mm_add_epi32(Max(Max(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(1)), _mm_set1_epi32(SCREENW));
-
-        __m128i vStartY = Max(Min(Min(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(0));
-        __m128i vEndY   = Min(_mm_add_epi32(Max(Max(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(1)), _mm_set1_epi32(SCREENH));
-
+        VecS32 vStartY = vmax(vmin(vmin(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), VecS32(0));
+        VecS32 vEndY   = vmin(vmax(vmax(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y) + VecS32(1), VecS32(SCREENH));
 
 		for(int i = 0; i < numLanes; i++)
 		{
 			// Skip triangle if area is zero 
-			if(triArea.m128i_i32[i] <= 0) continue;
+			if(triArea.lane[i] <= 0) continue;
 			
 			float oneOverW[3];
 			for(int j = 0; j < 3; j++)
 			{
-				oneOverW[j] = xformedPos[j].W.m128_f32[i];
+				oneOverW[j] = xformedPos[j].W.lane[i];
 			}
 
 			// Reject the triangle if any of its verts is behind the nearclip plane
 			if(oneOverW[0] > 1.0f || oneOverW[1] > 1.0f || oneOverW[2] > 1.0f) continue;
 
 			// Convert bounding box in terms of pixels to bounding box in terms of tiles
-			int startX = max(vStartX.m128i_i32[i]/TILE_WIDTH_IN_PIXELS, 0);
-			int endX   = min(vEndX.m128i_i32[i]/TILE_WIDTH_IN_PIXELS, SCREENW_IN_TILES-1);
+			int startX = max(vStartX.lane[i]/TILE_WIDTH_IN_PIXELS, 0);
+			int endX   = min(vEndX.lane[i]/TILE_WIDTH_IN_PIXELS, SCREENW_IN_TILES-1);
 
-			int startY = max(vStartY.m128i_i32[i]/TILE_HEIGHT_IN_PIXELS, 0);
-			int endY   = min(vEndY.m128i_i32[i]/TILE_HEIGHT_IN_PIXELS, SCREENH_IN_TILES-1);
+			int startY = max(vStartY.lane[i]/TILE_HEIGHT_IN_PIXELS, 0);
+			int endY   = min(vEndY.lane[i]/TILE_HEIGHT_IN_PIXELS, SCREENH_IN_TILES-1);
 
 			// Add triangle to the tiles or bins that the bounding box covers
 			int row, col;
@@ -202,51 +201,51 @@ void TransformedMeshSSE::BinTransformedTrianglesMT(UINT taskId,
 		vFxPt4 xFormedFxPtPos[3];
 		for(int i = 0; i < 3; i++)
 		{
-			xFormedFxPtPos[i].X = _mm_cvtps_epi32(xformedPos[i].X);
-			xFormedFxPtPos[i].Y = _mm_cvtps_epi32(xformedPos[i].Y);
-			xFormedFxPtPos[i].Z = _mm_cvtps_epi32(xformedPos[i].Z);
-			xFormedFxPtPos[i].W = _mm_cvtps_epi32(xformedPos[i].W);
+			xFormedFxPtPos[i].X = ftoi_round(xformedPos[i].X);
+			xFormedFxPtPos[i].Y = ftoi_round(xformedPos[i].Y);
+			xFormedFxPtPos[i].Z = ftoi_round(xformedPos[i].Z);
+			xFormedFxPtPos[i].W = ftoi_round(xformedPos[i].W);
 		}
 
 		// Compute triangle are
-		__m128i A0 = _mm_sub_epi32(xFormedFxPtPos[1].Y, xFormedFxPtPos[2].Y);
-		__m128i B0 = _mm_sub_epi32(xFormedFxPtPos[2].X, xFormedFxPtPos[1].X);
-		__m128i C0 = _mm_sub_epi32(_mm_mullo_epi32(xFormedFxPtPos[1].X, xFormedFxPtPos[2].Y), _mm_mullo_epi32(xFormedFxPtPos[2].X, xFormedFxPtPos[1].Y));
+		VecS32 A0 = xFormedFxPtPos[1].Y - xFormedFxPtPos[2].Y;
+		VecS32 B0 = xFormedFxPtPos[2].X - xFormedFxPtPos[1].X;
+		VecS32 C0 = xFormedFxPtPos[1].X * xFormedFxPtPos[2].Y - xFormedFxPtPos[2].X * xFormedFxPtPos[1].Y;
 
-		__m128i triArea = _mm_mullo_epi32(A0, xFormedFxPtPos[0].X);
-		triArea = _mm_add_epi32(triArea, _mm_mullo_epi32(B0, xFormedFxPtPos[0].Y));
-		triArea = _mm_add_epi32(triArea, C0);
+		VecS32 triArea = A0 * xFormedFxPtPos[0].X;
+		triArea += B0 * xFormedFxPtPos[0].Y;
+		triArea += C0;
 
-		__m128 oneOverTriArea = _mm_div_ps(_mm_set1_ps(1.0f), _mm_cvtepi32_ps(triArea));
+		VecF32 oneOverTriArea = VecF32(1.0f) / itof(triArea);
 		
 		// Find bounding box for screen space triangle in terms of pixels
-		__m128i vStartX = Max(Min(Min(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(0));
-		__m128i vEndX   = Min(_mm_add_epi32(Max(Max(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(1)), _mm_set1_epi32(SCREENW));
+		VecS32 vStartX = vmax(vmin(vmin(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), VecS32(0));
+		VecS32 vEndX   = vmin(vmax(vmax(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X) + VecS32(1), VecS32(SCREENW));
 
-        __m128i vStartY = Max(Min(Min(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(0));
-        __m128i vEndY   = Min(_mm_add_epi32(Max(Max(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(1)), _mm_set1_epi32(SCREENH));
+        VecS32 vStartY = vmax(vmin(vmin(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), VecS32(0));
+        VecS32 vEndY   = vmin(vmax(vmax(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y) + VecS32(1), VecS32(SCREENH));
 
 
 		for(int i = 0; i < numLanes; i++)
 		{
 			// Skip triangle if area is zero 
-			if(triArea.m128i_i32[i] <= 0) continue;
+			if(triArea.lane[i] <= 0) continue;
 			
 			float oneOverW[3];
 			for(int j = 0; j < 3; j++)
 			{
-				oneOverW[j] = xformedPos[j].W.m128_f32[i];
+				oneOverW[j] = xformedPos[j].W.lane[i];
 			}
 			
 			// Reject the triangle if any of its verts is behind the nearclip plane
 			if(oneOverW[0] > 1.0f || oneOverW[1] > 1.0f || oneOverW[2] > 1.0f) continue;
 
 			// Convert bounding box in terms of pixels to bounding box in terms of tiles
-			int startX = max(vStartX.m128i_i32[i]/TILE_WIDTH_IN_PIXELS, 0);
-			int endX   = min(vEndX.m128i_i32[i]/TILE_WIDTH_IN_PIXELS, SCREENW_IN_TILES-1);
+			int startX = max(vStartX.lane[i]/TILE_WIDTH_IN_PIXELS, 0);
+			int endX   = min(vEndX.lane[i]/TILE_WIDTH_IN_PIXELS, SCREENW_IN_TILES-1);
 
-			int startY = max(vStartY.m128i_i32[i]/TILE_HEIGHT_IN_PIXELS, 0);
-			int endY   = min(vEndY.m128i_i32[i]/TILE_HEIGHT_IN_PIXELS, SCREENH_IN_TILES-1);
+			int startY = max(vStartY.lane[i]/TILE_HEIGHT_IN_PIXELS, 0);
+			int endY   = min(vEndY.lane[i]/TILE_HEIGHT_IN_PIXELS, SCREENH_IN_TILES-1);
 
 			// Add triangle to the tiles or bins that the bounding box covers
 			int row, col;
@@ -275,9 +274,9 @@ void TransformedMeshSSE::GetOneTriangleData(float* xformedPos, UINT triId, UINT 
 	for(int i = 0; i < 3; i++)
 	{
 		UINT index = mpIndices[(triId * 3) + i];
-		(pOut + i)->X.m128_f32[lane] = mpXformedPos[index].m128_f32[0];
-		(pOut + i)->Y.m128_f32[lane] = mpXformedPos[index].m128_f32[1];
-		(pOut + i)->Z.m128_f32[lane] = mpXformedPos[index].m128_f32[2];
-		(pOut + i)->W.m128_f32[lane] = mpXformedPos[index].m128_f32[3];
+		(pOut + i)->X.lane[lane] = mpXformedPos[index].m128_f32[0];
+		(pOut + i)->Y.lane[lane] = mpXformedPos[index].m128_f32[1];
+		(pOut + i)->Z.lane[lane] = mpXformedPos[index].m128_f32[2];
+		(pOut + i)->W.lane[lane] = mpXformedPos[index].m128_f32[3];
 	}
 }

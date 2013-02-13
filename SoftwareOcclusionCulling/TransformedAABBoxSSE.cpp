@@ -149,10 +149,10 @@ void TransformedAABBoxSSE::Gather(vFloat4 pOut[3], UINT triId)
 		for(int i = 0; i < 3; i++)
 		{
 			UINT index = sBBIndexList[(triId * 3) + (lane * 3) + i];
-			pOut[i].X.m128_f32[lane] = mpXformedPos[index].m128_f32[0];
-			pOut[i].Y.m128_f32[lane] = mpXformedPos[index].m128_f32[1];
-			pOut[i].Z.m128_f32[lane] = mpXformedPos[index].m128_f32[2];
-			pOut[i].W.m128_f32[lane] = mpXformedPos[index].m128_f32[3];
+			pOut[i].X.lane[lane] = mpXformedPos[index].m128_f32[0];
+			pOut[i].Y.lane[lane] = mpXformedPos[index].m128_f32[1];
+			pOut[i].Z.lane[lane] = mpXformedPos[index].m128_f32[2];
+			pOut[i].W.lane[lane] = mpXformedPos[index].m128_f32[3];
 		}
 	}
 }
@@ -169,10 +169,10 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 	// so to enable the two to have to set bits 6 and 15 which 1000 0000 0100 0000 = 0x8040
 	_mm_setcsr( _mm_getcsr() | 0x8040 );
 
-	__m128i colOffset = _mm_setr_epi32(0, 1, 0, 1);
-	__m128i rowOffset = _mm_setr_epi32(0, 0, 1, 1);
+	VecS32 colOffset(0, 1, 0, 1);
+	VecS32 rowOffset(0, 0, 1, 1);
 
-	__m128i fxptZero = _mm_setzero_si128();
+	VecS32 fxptZero(0);
 	float* pDepthBuffer = (float*)pRenderTargetPixels; 
 	
 	// Rasterize the AABB triangles 4 at a time
@@ -185,53 +185,53 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
         vFxPt4 xFormedFxPtPos[3];
 		for(int m = 0; m < 3; m++)
 		{
-			xFormedFxPtPos[m].X = _mm_cvtps_epi32(xformedPos[m].X);
-			xFormedFxPtPos[m].Y = _mm_cvtps_epi32(xformedPos[m].Y);
-			xFormedFxPtPos[m].Z = _mm_cvtps_epi32(xformedPos[m].Z);
-			xFormedFxPtPos[m].W = _mm_cvtps_epi32(xformedPos[m].W);
+			xFormedFxPtPos[m].X = ftoi_round(xformedPos[m].X);
+			xFormedFxPtPos[m].Y = ftoi_round(xformedPos[m].Y);
+			xFormedFxPtPos[m].Z = ftoi_round(xformedPos[m].Z);
+			xFormedFxPtPos[m].W = ftoi_round(xformedPos[m].W);
 		}
 
 		// Fab(x, y) =     Ax       +       By     +      C              = 0
 		// Fab(x, y) = (ya - yb)x   +   (xb - xa)y + (xa * yb - xb * ya) = 0
 		// Compute A = (ya - yb) for the 3 line segments that make up each triangle
-		__m128i A0 = _mm_sub_epi32(xFormedFxPtPos[1].Y, xFormedFxPtPos[2].Y);
-		__m128i A1 = _mm_sub_epi32(xFormedFxPtPos[2].Y, xFormedFxPtPos[0].Y);
-		__m128i A2 = _mm_sub_epi32(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y);
+		VecS32 A0 = xFormedFxPtPos[1].Y - xFormedFxPtPos[2].Y;
+		VecS32 A1 = xFormedFxPtPos[2].Y - xFormedFxPtPos[0].Y;
+		VecS32 A2 = xFormedFxPtPos[0].Y - xFormedFxPtPos[1].Y;
 
 		// Compute B = (xb - xa) for the 3 line segments that make up each triangle
-		__m128i B0 = _mm_sub_epi32(xFormedFxPtPos[2].X, xFormedFxPtPos[1].X);
-		__m128i B1 = _mm_sub_epi32(xFormedFxPtPos[0].X, xFormedFxPtPos[2].X);
-		__m128i B2 = _mm_sub_epi32(xFormedFxPtPos[1].X, xFormedFxPtPos[0].X);
+		VecS32 B0 = xFormedFxPtPos[2].X - xFormedFxPtPos[1].X;
+		VecS32 B1 = xFormedFxPtPos[0].X - xFormedFxPtPos[2].X;
+		VecS32 B2 = xFormedFxPtPos[1].X - xFormedFxPtPos[0].X;
 
 		// Compute C = (xa * yb - xb * ya) for the 3 line segments that make up each triangle
-		__m128i C0 = _mm_sub_epi32(_mm_mullo_epi32(xFormedFxPtPos[1].X, xFormedFxPtPos[2].Y), _mm_mullo_epi32(xFormedFxPtPos[2].X, xFormedFxPtPos[1].Y));
-		__m128i C1 = _mm_sub_epi32(_mm_mullo_epi32(xFormedFxPtPos[2].X, xFormedFxPtPos[0].Y), _mm_mullo_epi32(xFormedFxPtPos[0].X, xFormedFxPtPos[2].Y));
-		__m128i C2 = _mm_sub_epi32(_mm_mullo_epi32(xFormedFxPtPos[0].X, xFormedFxPtPos[1].Y), _mm_mullo_epi32(xFormedFxPtPos[1].X, xFormedFxPtPos[0].Y));
+		VecS32 C0 = xFormedFxPtPos[1].X * xFormedFxPtPos[2].Y - xFormedFxPtPos[2].X * xFormedFxPtPos[1].Y;
+		VecS32 C1 = xFormedFxPtPos[2].X * xFormedFxPtPos[0].Y - xFormedFxPtPos[0].X * xFormedFxPtPos[2].Y;
+		VecS32 C2 = xFormedFxPtPos[0].X * xFormedFxPtPos[1].Y - xFormedFxPtPos[1].X * xFormedFxPtPos[0].Y;
 
 		// Compute triangle area
-		__m128i triArea = _mm_mullo_epi32(A0, xFormedFxPtPos[0].X);
-		triArea = _mm_add_epi32(triArea, _mm_mullo_epi32(B0, xFormedFxPtPos[0].Y));
-		triArea = _mm_add_epi32(triArea, C0);
+		VecS32 triArea = A0 * xFormedFxPtPos[0].X;
+		triArea += B0 * xFormedFxPtPos[0].Y;
+		triArea += C0;
 
-		__m128 oneOverTriArea = _mm_div_ps(_mm_set1_ps(1.0f), _mm_cvtepi32_ps(triArea));
+		VecF32 oneOverTriArea = VecF32(1.0f) / itof(triArea);
 
 		// Use bounding box traversal strategy to determine which pixels to rasterize 
-		__m128i startX = _mm_and_si128(Max(Min(Min(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(0)), _mm_set1_epi32(0xFFFFFFFE));
-		__m128i endX   = Min(_mm_add_epi32(Max(Max(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(1)), _mm_set1_epi32(SCREENW));
+		VecS32 startX = vmax(vmin(vmin(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), VecS32(0)) & VecS32(~1);
+		VecS32 endX   = vmin(vmax(vmax(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X) + VecS32(1), VecS32(SCREENW));
 
-		__m128i startY = _mm_and_si128(Max(Min(Min(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(0)), _mm_set1_epi32(0xFFFFFFFE));
-		__m128i endY   = Min(_mm_add_epi32(Max(Max(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(1)), _mm_set1_epi32(SCREENH));
+		VecS32 startY = vmax(vmin(vmin(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), VecS32(0)) & VecS32(~1);
+		VecS32 endY   = vmin(vmax(vmax(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y) + VecS32(1), VecS32(SCREENH));
 
 		for(int vv = 0; vv < 3; vv++) 
 		{
             // If W (holding 1/w in our case) is not between 0 and 1,
             // then vertex is behind near clip plane (1.0 in our case.
             // If W < 1, then verify 1/W > 1 (for W>0), and 1/W < 0 (for W < 0).
-		    __m128 nearClipMask0 = _mm_cmple_ps(xformedPos[vv].W, _mm_set1_ps(0.0f));
-		    __m128 nearClipMask1 = _mm_cmpge_ps(xformedPos[vv].W, _mm_set1_ps(1.0f));
-            __m128 nearClipMask  = _mm_or_ps(nearClipMask0, nearClipMask1);
+		    VecF32 nearClipMask0 = cmple(xformedPos[vv].W, VecF32(0.0f));
+		    VecF32 nearClipMask1 = cmpge(xformedPos[vv].W, VecF32(1.0f));
+			VecS32 nearClipMask = float2bits(or(nearClipMask0, nearClipMask1));
 
-			if(!_mm_test_all_zeros(*(__m128i*)&nearClipMask, *(__m128i*)&nearClipMask))
+			if(!is_all_zeros(nearClipMask))
 			{
                 // All four vertices are behind the near plane (we're processing four triangles at a time w/ SSE)
                 *mVisible = true;
@@ -243,107 +243,103 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
         for(int lane=0; lane < SSE; lane++)
         {
 			// Skip triangle if area is zero 
-			if(triArea.m128i_i32[lane] <= 0)
+			if(triArea.lane[lane] <= 0)
 			{
 				continue;
 			}
 
 			// Extract this triangle's properties from the SIMD versions
-            __m128 zz[3], oneOverW[3];
+            VecF32 zz[3], oneOverW[3];
 			for(int vv = 0; vv < 3; vv++)
 			{
-				zz[vv] = _mm_set1_ps(xformedPos[vv].Z.m128_f32[lane]);
-				oneOverW[vv] = _mm_set1_ps(xformedPos[vv].W.m128_f32[lane]);
+				zz[vv] = VecF32(xformedPos[vv].Z.lane[lane]);
+				oneOverW[vv] = VecF32(xformedPos[vv].W.lane[lane]);
 			}
 
-			__m128 oneOverTotalArea = _mm_set1_ps(oneOverTriArea.m128_f32[lane]);
+			VecF32 oneOverTotalArea(oneOverTriArea.lane[lane]);
 			zz[1] = (zz[1] - zz[0]) * oneOverTotalArea;
 			zz[2] = (zz[2] - zz[0]) * oneOverTotalArea;
 			
-			int startXx = startX.m128i_i32[lane];
-			int endXx	= endX.m128i_i32[lane];
-			int startYy = startY.m128i_i32[lane];
-			int endYy	= endY.m128i_i32[lane];
+			int startXx = startX.lane[lane];
+			int endXx	= endX.lane[lane];
+			int startYy = startY.lane[lane];
+			int endYy	= endY.lane[lane];
 		
-			__m128i aa0 = _mm_set1_epi32(A0.m128i_i32[lane]);
-			__m128i aa1 = _mm_set1_epi32(A1.m128i_i32[lane]);
-			__m128i aa2 = _mm_set1_epi32(A2.m128i_i32[lane]);
+			VecS32 aa0(A0.lane[lane]);
+			VecS32 aa1(A1.lane[lane]);
+			VecS32 aa2(A2.lane[lane]);
 
-			__m128i bb0 = _mm_set1_epi32(B0.m128i_i32[lane]);
-			__m128i bb1 = _mm_set1_epi32(B1.m128i_i32[lane]);
-			__m128i bb2 = _mm_set1_epi32(B2.m128i_i32[lane]);
+			VecS32 bb0(B0.lane[lane]);
+			VecS32 bb1(B1.lane[lane]);
+			VecS32 bb2(B2.lane[lane]);
 
-			__m128i cc0 = _mm_set1_epi32(C0.m128i_i32[lane]);
-			__m128i cc1 = _mm_set1_epi32(C1.m128i_i32[lane]);
-			__m128i cc2 = _mm_set1_epi32(C2.m128i_i32[lane]);
+			VecS32 cc0(C0.lane[lane]);
+			VecS32 cc1(C1.lane[lane]);
+			VecS32 cc2(C2.lane[lane]);
 
-			__m128i aa0Inc = _mm_slli_epi32(aa0, 1);
-			__m128i aa1Inc = _mm_slli_epi32(aa1, 1);
-			__m128i aa2Inc = _mm_slli_epi32(aa2, 1);
-
-			__m128i row, col;
+			VecS32 aa0Inc = shiftl<1>(aa0);
+			VecS32 aa1Inc = shiftl<1>(aa1);
+			VecS32 aa2Inc = shiftl<1>(aa2);
 
 			// Tranverse pixels in 2x2 blocks and store 2x2 pixel quad depths contiguously in memory ==> 2*X
 			// This method provides better perfromance
 			int rowIdx = (startYy * SCREENW + 2 * startXx);
 
-			col = _mm_add_epi32(colOffset, _mm_set1_epi32(startXx));
-			__m128i aa0Col = _mm_mullo_epi32(aa0, col);
-			__m128i aa1Col = _mm_mullo_epi32(aa1, col);
-			__m128i aa2Col = _mm_mullo_epi32(aa2, col);
+			VecS32 col = colOffset + VecS32(startXx);
+			VecS32 aa0Col = aa0 * col;
+			VecS32 aa1Col = aa1 * col;
+			VecS32 aa2Col = aa2 * col;
 
-			row = _mm_add_epi32(rowOffset, _mm_set1_epi32(startYy));
-			__m128i bb0Row = _mm_add_epi32(_mm_mullo_epi32(bb0, row), cc0);
-			__m128i bb1Row = _mm_add_epi32(_mm_mullo_epi32(bb1, row), cc1);
-			__m128i bb2Row = _mm_add_epi32(_mm_mullo_epi32(bb2, row), cc2);
+			VecS32 row = rowOffset + VecS32(startYy);
+			VecS32 bb0Row = bb0 * row + cc0;
+			VecS32 bb1Row = bb1 * row + cc1;
+			VecS32 bb2Row = bb2 * row + cc2;
 
-			__m128i sum0Row = _mm_add_epi32(aa0Col, bb0Row);
-			__m128i sum1Row = _mm_add_epi32(aa1Col, bb1Row);
-			__m128i sum2Row = _mm_add_epi32(aa2Col, bb2Row);
+			VecS32 sum0Row = aa0Col + bb0Row;
+			VecS32 sum1Row = aa1Col + bb1Row;
+			VecS32 sum2Row = aa2Col + bb2Row;
 
-			__m128i bb0Inc = _mm_slli_epi32(bb0, 1);
-			__m128i bb1Inc = _mm_slli_epi32(bb1, 1);
-			__m128i bb2Inc = _mm_slli_epi32(bb2, 1);
+			VecS32 bb0Inc = shiftl<1>(bb0);
+			VecS32 bb1Inc = shiftl<1>(bb1);
+			VecS32 bb2Inc = shiftl<1>(bb2);
 
 			// Incrementally compute Fab(x, y) for all the pixels inside the bounding box formed by (startX, endX) and (startY, endY)
 			for(int r = startYy; r < endYy; r += 2,
-											row  = _mm_add_epi32(row, _mm_set1_epi32(2)),
 											rowIdx = rowIdx + 2 * SCREENW,
-											sum0Row = _mm_add_epi32(sum0Row, bb0Inc),
-											sum1Row = _mm_add_epi32(sum1Row, bb1Inc),
-											sum2Row = _mm_add_epi32(sum2Row, bb2Inc))
+											sum0Row += bb0Inc,
+											sum1Row += bb1Inc,
+											sum2Row += bb2Inc)
 			{
 				// Compute barycentric coordinates 
 				int idx = rowIdx;
-				__m128i alpha = sum0Row;
-				__m128i beta = sum1Row;
-				__m128i gama = sum2Row;
+				VecS32 alpha = sum0Row;
+				VecS32 beta = sum1Row;
+				VecS32 gama = sum2Row;
 
 				for(int c = startXx; c < endXx; c += 2,
 												idx += 4,
-												alpha = _mm_add_epi32(alpha, aa0Inc),
-												beta  = _mm_add_epi32(beta, aa1Inc),
-												gama  = _mm_add_epi32(gama, aa2Inc))
+												alpha += aa0Inc,
+												beta  += aa1Inc,
+												gama  += aa2Inc)
 				{
 					//Test Pixel inside triangle
-					__m128i mask = _mm_cmplt_epi32(fxptZero, _mm_or_si128(_mm_or_si128(alpha, beta), gama));
+					VecS32 mask = cmplt(fxptZero, alpha | beta | gama);
 					
 					// Early out if all of this quad's pixels are outside the triangle.
-					if(_mm_test_all_zeros(mask, mask))
+					if(is_all_zeros(mask))
 					{
 						continue;
 					}
 
 					// Compute barycentric-interpolated depth
-			        __m128 depth = zz[0];
-					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), zz[1]));
-					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), zz[2]));
+			        VecF32 depth = zz[0];
+					depth += itof(beta) * zz[1];
+					depth += itof(gama) * zz[2];
 
-					__m128 previousDepthValue = *(__m128*)&pDepthBuffer[idx];
-
-					__m128 depthMask  = _mm_cmpge_ps( depth, previousDepthValue);
-					__m128i finalMask = _mm_and_si128( mask, _mm_castps_si128(depthMask));
-					if(!_mm_test_all_zeros(finalMask, finalMask))
+					VecF32 previousDepthValue = VecF32::load(&pDepthBuffer[idx]);
+					VecF32 depthMask = cmpge(depth, previousDepthValue);
+					VecS32 finalMask = mask & float2bits(depthMask);
+					if(!is_all_zeros(finalMask))
 					{
 						*mVisible = true;
 						return; //early exit
