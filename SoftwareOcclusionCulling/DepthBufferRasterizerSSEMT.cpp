@@ -321,6 +321,12 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 		VecS32 triArea = B2 * A1 - B1 * A2;
 		VecF32 oneOverTriArea = VecF32(1.0f) / itof(triArea);
 
+		// Z setup
+		VecF32 Z[3];
+		Z[0] = xformedvPos[0].Z;
+		Z[1] = (xformedvPos[1].Z - Z[0]) * oneOverTriArea;
+		Z[2] = (xformedvPos[2].Z - Z[0]) * oneOverTriArea;
+
 		// Use bounding box traversal strategy to determine which pixels to rasterize 
 		VecS32 startX = vmax(vmin(vmin(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), VecS32(tileStartX)) & VecS32(~1);
 		VecS32 endX   = vmin(vmax(vmax(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X) + VecS32(1), VecS32(tileEndX));
@@ -335,13 +341,9 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
             VecF32 zz[3], oneOverW[3];
 			for(int vv = 0; vv < 3; vv++)
 			{
-				zz[vv] = VecF32(xformedvPos[vv].Z.lane[lane]);
+				zz[vv] = VecF32(Z[vv].lane[lane]);
 				oneOverW[vv] = VecF32(xformedvPos[vv].W.lane[lane]);
 			}
-
-			VecF32 oneOverTotalArea(oneOverTriArea.lane[lane]);
-			zz[1] = (zz[1] - zz[0]) * oneOverTotalArea;
-			zz[2] = (zz[2] - zz[0]) * oneOverTotalArea;
 			
 			int startXx = startX.lane[lane];
 			int endXx	= endX.lane[lane];
