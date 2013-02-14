@@ -399,10 +399,6 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 					//Test Pixel inside triangle
 					VecS32 mask = alpha | beta | gama;
 					
-					// Early out if all of this quad's pixels are outside the triangle.
-					if(is_all_negative(mask))
-						continue;
-					
 					// Compute barycentric-interpolated depth
 					VecF32 depth = zz[0];
 					depth += itof(beta) * zz[1];
