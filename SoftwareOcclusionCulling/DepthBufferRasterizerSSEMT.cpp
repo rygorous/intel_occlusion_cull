@@ -234,10 +234,10 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
     UINT tileY = taskId / screenWidthInTiles;
 
     int tileStartX = tileX * TILE_WIDTH_IN_PIXELS;
-	int tileEndX   = tileStartX + TILE_WIDTH_IN_PIXELS;
+	int tileEndX   = tileStartX + TILE_WIDTH_IN_PIXELS - 1;
 	
 	int tileStartY = tileY * TILE_HEIGHT_IN_PIXELS;
-	int tileEndY   = tileStartY + TILE_HEIGHT_IN_PIXELS;
+	int tileEndY   = tileStartY + TILE_HEIGHT_IN_PIXELS - 1;
 
 	UINT bin = 0;
 	UINT binIndex = 0;
@@ -325,10 +325,10 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 
 		// Use bounding box traversal strategy to determine which pixels to rasterize 
 		VecS32 startX = vmax(vmin(vmin(fixX[0], fixX[1]), fixX[2]), VecS32(tileStartX)) & VecS32(~1);
-		VecS32 endX   = vmin(vmax(vmax(fixX[0], fixX[1]), fixX[2]) + VecS32(1), VecS32(tileEndX));
+		VecS32 endX   = vmin(vmax(vmax(fixX[0], fixX[1]), fixX[2]), VecS32(tileEndX));
 
 		VecS32 startY = vmax(vmin(vmin(fixY[0], fixY[1]), fixY[2]), VecS32(tileStartY)) & VecS32(~1);
-		VecS32 endY   = vmin(vmax(vmax(fixY[0], fixY[1]), fixY[2]) + VecS32(1), VecS32(tileEndY));
+		VecS32 endY   = vmin(vmax(vmax(fixY[0], fixY[1]), fixY[2]), VecS32(tileEndY));
 
         // Now we have 4 triangles set up.  Rasterize them each individually.
         for(int lane=0; lane < numSimdTris; lane++)
@@ -354,10 +354,6 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			VecS32 bb1(B1.lane[lane]);
 			VecS32 bb2(B2.lane[lane]);
 
-			VecS32 cc0(C0.lane[lane]);
-			VecS32 cc1(C1.lane[lane]);
-			VecS32 cc2(C2.lane[lane]);
-
 			VecS32 aa0Inc = shiftl<1>(aa0);
 			VecS32 aa1Inc = shiftl<1>(aa1);
 			VecS32 aa2Inc = shiftl<1>(aa2);
@@ -374,15 +370,15 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			VecS32 col = VecS32(startXx) + colOffset;
 			VecS32 row = VecS32(startYy) + rowOffset;
 
-			VecS32 sum0Row = aa0 * col + bb0 * row + cc0;
-			VecS32 sum1Row = aa1 * col + bb1 * row + cc1;
-			VecS32 sum2Row = aa2 * col + bb2 * row + cc2;
+			VecS32 sum0Row = aa0 * col + bb0 * row + VecS32(C0.lane[lane]);
+			VecS32 sum1Row = aa1 * col + bb1 * row + VecS32(C1.lane[lane]);
+			VecS32 sum2Row = aa2 * col + bb2 * row + VecS32(C2.lane[lane]);
 
-			for(int r = startYy; r < endYy; r += 2,
-											rowIdx = rowIdx + 2 * SCREENW,
-											sum0Row += bb0Inc,
-											sum1Row += bb1Inc,
-											sum2Row += bb2Inc)
+			for(int r = startYy; r <= endYy; r += 2,
+										 	 rowIdx = rowIdx + 2 * SCREENW,
+											 sum0Row += bb0Inc,
+											 sum1Row += bb1Inc,
+											 sum2Row += bb2Inc)
 			{
 				// Compute barycentric coordinates 
 				int idx = rowIdx;
@@ -390,11 +386,11 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 				VecS32 beta = sum1Row;
 				VecS32 gama = sum2Row;
 
-				for(int c = startXx; c < endXx; c += 2,
-												idx += 4,
-												alpha += aa0Inc,
-												beta  += aa1Inc,
-												gama  += aa2Inc)
+				for(int c = startXx; c <= endXx; c += 2,
+											 	 idx += 4,
+												 alpha += aa0Inc,
+												 beta  += aa1Inc,
+												 gama  += aa2Inc)
 				{
 					//Test Pixel inside triangle
 					VecS32 mask = alpha | beta | gama;
