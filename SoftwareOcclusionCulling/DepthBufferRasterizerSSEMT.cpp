@@ -338,13 +338,12 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
         for(int lane=0; lane < numSimdTris; lane++)
         {
 			// Extract this triangle's properties from the SIMD versions
-            VecF32 zz[3], oneOverW[3];
+            VecF32 zz[3];
 			for(int vv = 0; vv < 3; vv++)
 			{
 				zz[vv] = VecF32(Z[vv].lane[lane]);
-				oneOverW[vv] = VecF32(xformedvPos[vv].W.lane[lane]);
 			}
-			
+
 			int startXx = startX.lane[lane];
 			int endXx	= endX.lane[lane];
 			int startYy = startY.lane[lane];
@@ -409,7 +408,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 						continue;
 					
 					// Compute barycentric-interpolated depth
-			        VecF32 depth = zz[0];
+					VecF32 depth = zz[0];
 					depth += itof(beta) * zz[1];
 					depth += itof(gama) * zz[2];
 
