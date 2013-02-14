@@ -220,16 +220,17 @@ void TransformedMeshSSE::BinTransformedTrianglesMT(UINT taskId,
 		
 		// Find bounding box for screen space triangle in terms of pixels
 		VecS32 vStartX = vmax(vmin(vmin(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), VecS32(0));
-		VecS32 vEndX   = vmin(vmax(vmax(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X) + VecS32(1), VecS32(SCREENW));
+		VecS32 vEndX   = vmin(vmax(vmax(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), VecS32(SCREENW - 1));
 
         VecS32 vStartY = vmax(vmin(vmin(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), VecS32(0));
-        VecS32 vEndY   = vmin(vmax(vmax(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y) + VecS32(1), VecS32(SCREENH));
+        VecS32 vEndY   = vmin(vmax(vmax(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), VecS32(SCREENH - 1));
 
 
 		for(int i = 0; i < numLanes; i++)
 		{
 			// Skip triangle if area is zero 
 			if(triArea.lane[i] <= 0) continue;
+			if(vEndX.lane[i] < vStartX.lane[i] || vEndY.lane[i] < vStartY.lane[i]) continue;
 			
 			float oneOverW[3];
 			for(int j = 0; j < 3; j++)
