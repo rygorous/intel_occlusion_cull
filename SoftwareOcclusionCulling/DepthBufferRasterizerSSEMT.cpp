@@ -374,36 +374,37 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT task
 			VecS32 sum1Row = aa1 * col + bb1 * row + VecS32(C1.lane[lane]);
 			VecS32 sum2Row = aa2 * col + bb2 * row + VecS32(C2.lane[lane]);
 
+			VecF32 zx = itof(aa1Inc) * zz[1] + itof(aa2Inc) * zz[2];
+
 			for(int r = startYy; r <= endYy; r += 2,
-										 	 rowIdx = rowIdx + 2 * SCREENW,
+											 rowIdx += 2 * SCREENW,
 											 sum0Row += bb0Inc,
 											 sum1Row += bb1Inc,
 											 sum2Row += bb2Inc)
+
 			{
 				// Compute barycentric coordinates 
 				int idx = rowIdx;
 				VecS32 alpha = sum0Row;
 				VecS32 beta = sum1Row;
 				VecS32 gama = sum2Row;
+				VecF32 depth = zz[0] + itof(sum1Row) * zz[1] + itof(sum2Row) * zz[2];
 
 				for(int c = startXx; c <= endXx; c += 2,
 											 	 idx += 4,
 												 alpha += aa0Inc,
 												 beta  += aa1Inc,
-												 gama  += aa2Inc)
+												 gama  += aa2Inc,
+												 depth += zx)
 				{
 					//Test Pixel inside triangle
 					VecS32 mask = alpha | beta | gama;
-					
-					// Compute barycentric-interpolated depth
-					VecF32 depth = zz[0];
-					depth += itof(beta) * zz[1];
-					depth += itof(gama) * zz[2];
 
+					// Update depth
 					VecF32 previousDepthValue = VecF32::load(&pDepthBuffer[idx]);
 					VecF32 mergedDepth = vmax(depth, previousDepthValue);
-					depth = select(mergedDepth, previousDepthValue, mask);
-					depth.store(&pDepthBuffer[idx]);
+					VecF32 oDepth = select(mergedDepth, previousDepthValue, mask);
+					oDepth.store(&pDepthBuffer[idx]);
 				}//for each column											
 			}// for each row
 		}// for each triangle
