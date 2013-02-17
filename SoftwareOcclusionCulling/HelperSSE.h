@@ -50,6 +50,7 @@ inline VecS32 operator *(const VecS32 &a, const VecS32 &b)		{ return VecS32(_mm_
 inline VecS32 operator |(const VecS32 &a, const VecS32 &b)		{ return VecS32(_mm_or_si128(a.simd, b.simd)); }
 inline VecS32 operator &(const VecS32 &a, const VecS32 &b)		{ return VecS32(_mm_and_si128(a.simd, b.simd)); }
 
+inline VecS32 andnot(const VecS32 &a, const VecS32 &b)			{ return VecS32(_mm_andnot_si128(a.simd, b.simd)); }
 inline VecS32 vmin(const VecS32 &a, const VecS32 &b)			{ return VecS32(_mm_min_epi32(a.simd, b.simd)); }
 inline VecS32 vmax(const VecS32 &a, const VecS32 &b)			{ return VecS32(_mm_max_epi32(a.simd, b.simd)); }
 

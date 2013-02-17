@@ -172,7 +172,6 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 	VecS32 colOffset(0, 1, 0, 1);
 	VecS32 rowOffset(0, 0, 1, 1);
 
-	VecS32 fxptZero(0);
 	float* pDepthBuffer = (float*)pRenderTargetPixels; 
 	
 	// Rasterize the AABB triangles 4 at a time
@@ -181,38 +180,33 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 		vFloat4 xformedPos[3];
 		Gather(xformedPos, i);
 
-		// use fixed-point only for X and Y.  Avoid work for Z and W.
-        vFxPt4 xFormedFxPtPos[3];
-		for(int m = 0; m < 3; m++)
+		// use fixed-point only for X and Y.
+		VecS32 fixX[3], fixY[3];
+		for(int i = 0; i < 3; i++)
 		{
-			xFormedFxPtPos[m].X = ftoi_round(xformedPos[m].X);
-			xFormedFxPtPos[m].Y = ftoi_round(xformedPos[m].Y);
-			xFormedFxPtPos[m].Z = ftoi_round(xformedPos[m].Z);
-			xFormedFxPtPos[m].W = ftoi_round(xformedPos[m].W);
+			fixX[i] = ftoi_round(xformedPos[i].X);
+			fixY[i] = ftoi_round(xformedPos[i].Y);
 		}
 
 		// Fab(x, y) =     Ax       +       By     +      C              = 0
 		// Fab(x, y) = (ya - yb)x   +   (xb - xa)y + (xa * yb - xb * ya) = 0
 		// Compute A = (ya - yb) for the 3 line segments that make up each triangle
-		VecS32 A0 = xFormedFxPtPos[1].Y - xFormedFxPtPos[2].Y;
-		VecS32 A1 = xFormedFxPtPos[2].Y - xFormedFxPtPos[0].Y;
-		VecS32 A2 = xFormedFxPtPos[0].Y - xFormedFxPtPos[1].Y;
+		VecS32 A0 = fixY[1] - fixY[2];
+		VecS32 A1 = fixY[2] - fixY[0];
+		VecS32 A2 = fixY[0] - fixY[1];
 
 		// Compute B = (xb - xa) for the 3 line segments that make up each triangle
-		VecS32 B0 = xFormedFxPtPos[2].X - xFormedFxPtPos[1].X;
-		VecS32 B1 = xFormedFxPtPos[0].X - xFormedFxPtPos[2].X;
-		VecS32 B2 = xFormedFxPtPos[1].X - xFormedFxPtPos[0].X;
+		VecS32 B0 = fixX[2] - fixX[1];
+		VecS32 B1 = fixX[0] - fixX[2];
+		VecS32 B2 = fixX[1] - fixX[0];
 
 		// Compute C = (xa * yb - xb * ya) for the 3 line segments that make up each triangle
-		VecS32 C0 = xFormedFxPtPos[1].X * xFormedFxPtPos[2].Y - xFormedFxPtPos[2].X * xFormedFxPtPos[1].Y;
-		VecS32 C1 = xFormedFxPtPos[2].X * xFormedFxPtPos[0].Y - xFormedFxPtPos[0].X * xFormedFxPtPos[2].Y;
-		VecS32 C2 = xFormedFxPtPos[0].X * xFormedFxPtPos[1].Y - xFormedFxPtPos[1].X * xFormedFxPtPos[0].Y;
+		VecS32 C0 = fixX[1] * fixY[2] - fixX[2] * fixY[1];
+		VecS32 C1 = fixX[2] * fixY[0] - fixX[0] * fixY[2];
+		VecS32 C2 = fixX[0] * fixY[1] - fixX[1] * fixY[0];
 
 		// Compute triangle area
-		VecS32 triArea = A0 * xFormedFxPtPos[0].X;
-		triArea += B0 * xFormedFxPtPos[0].Y;
-		triArea += C0;
-
+		VecS32 triArea = B2 * A1 - B1 * A2;
 		VecF32 oneOverTriArea = VecF32(1.0f) / itof(triArea);
 
 		// Z setup
@@ -222,11 +216,11 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 		Z[2] = (xformedPos[2].Z - Z[0]) * oneOverTriArea;
 
 		// Use bounding box traversal strategy to determine which pixels to rasterize 
-		VecS32 startX = vmax(vmin(vmin(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), VecS32(0)) & VecS32(~1);
-		VecS32 endX   = vmin(vmax(vmax(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), VecS32(SCREENW - 1));
+		VecS32 startX = vmax(vmin(vmin(fixX[0], fixX[1]), fixX[2]), VecS32(0)) & VecS32(~1);
+		VecS32 endX   = vmin(vmax(vmax(fixX[0], fixX[1]), fixX[2]), VecS32(SCREENW - 1));
 
-		VecS32 startY = vmax(vmin(vmin(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), VecS32(0)) & VecS32(~1);
-		VecS32 endY   = vmin(vmax(vmax(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), VecS32(SCREENH - 1));
+		VecS32 startY = vmax(vmin(vmin(fixY[0], fixY[1]), fixY[2]), VecS32(0)) & VecS32(~1);
+		VecS32 endY   = vmin(vmax(vmax(fixY[0], fixY[1]), fixY[2]), VecS32(SCREENH - 1));
 
 		for(int vv = 0; vv < 3; vv++) 
 		{
@@ -274,35 +268,26 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 			VecS32 bb1(B1.lane[lane]);
 			VecS32 bb2(B2.lane[lane]);
 
-			VecS32 cc0(C0.lane[lane]);
-			VecS32 cc1(C1.lane[lane]);
-			VecS32 cc2(C2.lane[lane]);
-
 			VecS32 aa0Inc = shiftl<1>(aa0);
 			VecS32 aa1Inc = shiftl<1>(aa1);
 			VecS32 aa2Inc = shiftl<1>(aa2);
 
-			// Tranverse pixels in 2x2 blocks and store 2x2 pixel quad depths contiguously in memory ==> 2*X
-			// This method provides better perfromance
-			int rowIdx = (startYy * SCREENW + 2 * startXx);
-
-			VecS32 col = colOffset + VecS32(startXx);
-			VecS32 aa0Col = aa0 * col;
-			VecS32 aa1Col = aa1 * col;
-			VecS32 aa2Col = aa2 * col;
-
-			VecS32 row = rowOffset + VecS32(startYy);
-			VecS32 bb0Row = bb0 * row + cc0;
-			VecS32 bb1Row = bb1 * row + cc1;
-			VecS32 bb2Row = bb2 * row + cc2;
-
-			VecS32 sum0Row = aa0Col + bb0Row;
-			VecS32 sum1Row = aa1Col + bb1Row;
-			VecS32 sum2Row = aa2Col + bb2Row;
-
 			VecS32 bb0Inc = shiftl<1>(bb0);
 			VecS32 bb1Inc = shiftl<1>(bb1);
 			VecS32 bb2Inc = shiftl<1>(bb2);
+
+			// Traverse pixels in 2x2 blocks and store 2x2 pixel quad depths contiguously in memory ==> 2*X
+			// This method provides better performance
+			int rowIdx = (startYy * SCREENW + 2 * startXx);
+
+			VecS32 col = VecS32(startXx) + colOffset;
+			VecS32 row = VecS32(startYy) + rowOffset;
+
+			VecS32 sum0Row = aa0 * col + bb0 * row + VecS32(C0.lane[lane]);
+			VecS32 sum1Row = aa1 * col + bb1 * row + VecS32(C1.lane[lane]);
+			VecS32 sum2Row = aa2 * col + bb2 * row + VecS32(C2.lane[lane]);
+
+			VecF32 zx = itof(aa1Inc) * zz[1] + itof(aa2Inc) * zz[2];
 
 			// Incrementally compute Fab(x, y) for all the pixels inside the bounding box formed by (startX, endX) and (startY, endY)
 			for(int r = startYy; r <= endYy; r += 2,
@@ -316,36 +301,30 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 				VecS32 alpha = sum0Row;
 				VecS32 beta = sum1Row;
 				VecS32 gama = sum2Row;
+				VecF32 depth = zz[0] + itof(beta) * zz[1] + itof(gama) * zz[2];
+				VecS32 anyOut = VecS32::zero();
 
 				for(int c = startXx; c <= endXx; c += 2,
 												 idx += 4,
 												 alpha += aa0Inc,
 												 beta  += aa1Inc,
-												 gama  += aa2Inc)
+												 gama  += aa2Inc,
+												 depth += zx)
 				{
 					//Test Pixel inside triangle
-					VecS32 mask = cmplt(fxptZero, alpha | beta | gama);
+					VecS32 mask = alpha | beta | gama;
 					
-					// Early out if all of this quad's pixels are outside the triangle.
-					if(is_all_zeros(mask))
-					{
-						continue;
-					}
-
-					// Compute barycentric-interpolated depth
-			        VecF32 depth = zz[0];
-					depth += itof(beta) * zz[1];
-					depth += itof(gama) * zz[2];
-
 					VecF32 previousDepthValue = VecF32::load(&pDepthBuffer[idx]);
 					VecF32 depthMask = cmpge(depth, previousDepthValue);
-					VecS32 finalMask = mask & float2bits(depthMask);
-					if(!is_all_zeros(finalMask))
-					{
-						*mVisible = true;
-						return; //early exit
-					}
-				}//for each column											
+					VecS32 finalMask = andnot(mask, float2bits(depthMask));
+					anyOut |= finalMask;
+				}//for each column
+
+				if(!_mm_testz_si128(anyOut.simd, _mm_set1_epi32(0x80000000)))
+				{
+					*mVisible = true;
+					return; //early exit
+				}
 			}// for each row
 		}// for each triangle
 	}// for each set of SIMD# triangles

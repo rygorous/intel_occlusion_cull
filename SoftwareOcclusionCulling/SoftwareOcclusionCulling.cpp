@@ -38,7 +38,11 @@ float gFarClipDistance = 2000.0f;
 
 #ifdef BENCHMARK_VTUNE
 #include "ittnotify.h"
+#ifndef _M_X64
 #pragma comment(lib, "libittnotify.lib")
+#else
+#pragma comment(lib, "libittnotify64.lib")
+#endif
 #endif
 
 static void dprintf(const char *fmt, ...)
