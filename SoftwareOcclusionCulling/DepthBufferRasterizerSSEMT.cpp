@@ -16,6 +16,7 @@
 //--------------------------------------------------------------------------------------
 
 #include "DepthBufferRasterizerSSEMT.h"
+#include "HelperMT.h"
 
 DepthBufferRasterizerSSEMT::DepthBufferRasterizerSSEMT()
 	: DepthBufferRasterizerSSE()
@@ -40,9 +41,11 @@ DepthBufferRasterizerSSEMT::~DepthBufferRasterizerSSEMT()
 //-------------------------------------------------------------------------------
 void DepthBufferRasterizerSSEMT::IsVisible(CPUTCamera* pCamera)
 {
+	static const unsigned int kNumOccluderVisTasks = 32;
+
 	mpCamera = pCamera;
 	
-	gTaskMgr.CreateTaskSet(&DepthBufferRasterizerSSEMT::IsVisible, this, mNumModels1, NULL, 0, "Is Visible", &mIsVisible);
+	gTaskMgr.CreateTaskSet(&DepthBufferRasterizerSSEMT::IsVisible, this, kNumOccluderVisTasks, NULL, 0, "Is Visible", &mIsVisible);
 	// Wait for the task set
 	gTaskMgr.WaitForSet(mIsVisible);
 	// Release the task set
@@ -62,7 +65,11 @@ void DepthBufferRasterizerSSEMT::IsVisible(VOID *taskData, INT context, UINT tas
 //------------------------------------------------------------
 void DepthBufferRasterizerSSEMT::IsVisible(UINT taskId, UINT taskCount)
 {
-	mpTransformedModels1[taskId].IsVisible(mpCamera);
+	UINT start, end;
+	GetWorkExtent(&start, &end, taskId, taskCount, mNumModels1);
+
+	for (UINT i = start; i < end; i++)
+		mpTransformedModels1[i].IsVisible(mpCamera);
 }
 
 //------------------------------------------------------------------------------
