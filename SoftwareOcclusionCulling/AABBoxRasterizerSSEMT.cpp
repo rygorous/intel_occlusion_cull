@@ -16,6 +16,7 @@
 //--------------------------------------------------------------------------------------
 
 #include "AABBoxRasterizerSSEMT.h"
+#include "HelperMT.h"
 
 AABBoxRasterizerSSEMT::AABBoxRasterizerSSEMT()
 	: AABBoxRasterizerSSE()
@@ -55,23 +56,8 @@ void AABBoxRasterizerSSEMT::IsInsideViewFrustum(VOID* taskData, INT context, UIN
 //-----------------------------------------------------------------------------
 void AABBoxRasterizerSSEMT::IsInsideViewFrustum(UINT taskId, UINT taskCount)
 {
-	UINT numRemainingModels = mNumModels % taskCount;
-
-	UINT numModelsPerTask1 = mNumModels / taskCount + 1;
-	UINT numModelsPerTask2 = mNumModels / taskCount;
-
 	UINT start, end;
-	
-	if(taskId < numRemainingModels)
-	{
-		start = taskId * numModelsPerTask1;
-		end   = start +  numModelsPerTask1;
-	}
-	else
-	{
-		start = (numRemainingModels * numModelsPerTask1) + ((taskId - numRemainingModels) * numModelsPerTask2);
-		end   = start +  numModelsPerTask2;
-	}
+	GetWorkExtent(&start, &end, taskId, taskCount, mNumModels);
 
 	CalcInsideFrustum(&mpCamera->mFrustum, start, end);
 }

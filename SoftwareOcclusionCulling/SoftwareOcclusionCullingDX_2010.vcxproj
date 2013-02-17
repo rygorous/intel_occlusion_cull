@@ -297,6 +297,7 @@
     <ClInclude Include="DepthBufferRasterizerSSE.h" />
     <ClInclude Include="DepthBufferRasterizerSSEMT.h" />
     <ClInclude Include="DepthBufferRasterizerSSEST.h" />
+    <ClInclude Include="HelperMT.h" />
     <ClInclude Include="HelperScalar.h" />
     <ClInclude Include="HelperSSE.h" />
     <ClInclude Include="resource.h" />

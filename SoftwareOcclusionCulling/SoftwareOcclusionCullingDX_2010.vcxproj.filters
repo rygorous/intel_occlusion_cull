@@ -186,6 +186,9 @@
     <ClInclude Include="HelperScalar.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="HelperMT.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
