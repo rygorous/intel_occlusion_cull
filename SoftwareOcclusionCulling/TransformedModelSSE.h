@@ -28,10 +28,8 @@ class TransformedModelSSE : public HelperSSE
 		TransformedModelSSE();
 		~TransformedModelSSE();
 		void CreateTransformedMeshes(CPUTModelDX11 *pModel);
-		void IsVisible(CPUTCamera *pCamera);
-		void TransformMeshes(__m128 *viewMatrix, 
-					    	 __m128 *projMatrix,
-							 UINT start, 
+		void IsVisible(CPUTCamera *pCamera, __m128 *viewMatrix, __m128 *projMatrix);
+		void TransformMeshes(UINT start, 
 							 UINT end,
 							 CPUTCamera *pCamera);
 
@@ -112,8 +110,7 @@ class TransformedModelSSE : public HelperSSE
 		CPUTModelDX11 *mpCPUTModel;
 		UINT mNumMeshes;
 		__m128 *mWorldMatrix;
-		__m128 *mViewMatrix;
-		__m128 *mProjMatrix;
+		__m128 *mCumulativeMatrix;
 		__m128 *mViewPortMatrix;
 				
 		float3 mBBCenterWS;

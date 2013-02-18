@@ -20,8 +20,7 @@ TransformedModelSSE::TransformedModelSSE()
 	: mpCPUTModel(NULL),
 	  mNumMeshes(0),
 	  mWorldMatrix(NULL),
-	  mViewMatrix(NULL),
-	  mProjMatrix(NULL),
+	  mCumulativeMatrix(NULL),
 	  mViewPortMatrix(NULL),
 	  mVisible(false),
 	  mTooSmall(false),
@@ -30,8 +29,7 @@ TransformedModelSSE::TransformedModelSSE()
 	  mpXformedPos(NULL)
 {
 	mWorldMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
-	mViewMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
-	mProjMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
+	mCumulativeMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
 	mViewPortMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
 	
 	mViewPortMatrix[0] = _mm_loadu_ps((float*)&viewportMatrix.r0);
@@ -44,8 +42,7 @@ TransformedModelSSE::~TransformedModelSSE()
 {
 	SAFE_DELETE_ARRAY(mpMeshes);
 	_aligned_free(mWorldMatrix);
-	_aligned_free(mViewMatrix);
-	_aligned_free(mProjMatrix);
+	_aligned_free(mCumulativeMatrix);
 	_aligned_free(mViewPortMatrix);
 }
 
@@ -81,22 +78,11 @@ void TransformedModelSSE::CreateTransformedMeshes(CPUTModelDX11 *pModel)
 //------------------------------------------------------------------
 // Determine is the occluder model is inside view frustum
 //------------------------------------------------------------------
-void TransformedModelSSE::IsVisible(CPUTCamera* pCamera)
+void TransformedModelSSE::IsVisible(CPUTCamera* pCamera, __m128 *viewMatrix, __m128 *projMatrix)
 {
 	mpCPUTModel->GetBoundsWorldSpace(&mBBCenterWS, &mBBHalfWS);
 	mVisible = pCamera->mFrustum.IsVisible(mBBCenterWS, mBBHalfWS);
-}
-
-//---------------------------------------------------------------------------------------------------
-// Determine if the occluder size is sufficiently large enough to occlude other object sin the scene
-// If so transform the occluder to screen space so that it can be rasterized to the cPU depth buffer
-//---------------------------------------------------------------------------------------------------
-void TransformedModelSSE::TransformMeshes(__m128 *viewMatrix, 
-										  __m128 *projMatrix,
-										  UINT start, 
-										  UINT end,
-										  CPUTCamera* pCamera)
-{
+	
 	if(mVisible)
 	{
 		__m128 centerOS = _mm_set_ps(mBBCenterOS.w, mBBCenterOS.z, mBBCenterOS.y, mBBCenterOS.x);
@@ -105,12 +91,11 @@ void TransformedModelSSE::TransformMeshes(__m128 *viewMatrix,
 		float fov = pCamera->GetFov();
 		float tanOfHalfFov = tanf(fov * 0.5f);
 	
-		__m128 cumulativeMatrix[4];
-		MatrixMultiply(mWorldMatrix, viewMatrix, cumulativeMatrix);
-		MatrixMultiply(cumulativeMatrix, projMatrix, cumulativeMatrix);
-		MatrixMultiply(cumulativeMatrix, mViewPortMatrix, cumulativeMatrix);
+		MatrixMultiply(mWorldMatrix, viewMatrix, mCumulativeMatrix);
+		MatrixMultiply(mCumulativeMatrix, projMatrix, mCumulativeMatrix);
+		MatrixMultiply(mCumulativeMatrix, mViewPortMatrix, mCumulativeMatrix);
 
-		__m128 centerOSxForm = TransformCoords(&centerOS, cumulativeMatrix);
+		__m128 centerOSxForm = TransformCoords(&centerOS, mCumulativeMatrix);
 
 		float w = centerOSxForm.m128_f32[3];
 		if(w > 1.0f)
@@ -125,19 +110,28 @@ void TransformedModelSSE::TransformMeshes(__m128 *viewMatrix,
             // Assume visible.  This should be a safe assumption, as the frustum test says the bbox is visible.
             mTooSmall = false;
         }
+	}
+}
 
-		if(!mTooSmall)
+//---------------------------------------------------------------------------------------------------
+// Determine if the occluder size is sufficiently large enough to occlude other object sin the scene
+// If so transform the occluder to screen space so that it can be rasterized to the cPU depth buffer
+//---------------------------------------------------------------------------------------------------
+void TransformedModelSSE::TransformMeshes(UINT start, 
+										  UINT end,
+										  CPUTCamera* pCamera)
+{
+	if(mVisible && !mTooSmall)
+	{
+		UINT totalNumVertices = 0;
+		for(UINT meshId = 0; meshId < mNumMeshes; meshId++)
 		{
-			UINT totalNumVertices = 0;
-			for(UINT meshId = 0; meshId < mNumMeshes; meshId++)
+			totalNumVertices +=  mpMeshes[meshId].GetNumVertices();
+			if(totalNumVertices < start)
 			{
-				totalNumVertices +=  mpMeshes[meshId].GetNumVertices();
-				if(totalNumVertices < start)
-				{
-					continue;
-				}
-				mpMeshes[meshId].TransformVertices(cumulativeMatrix, start, end);
+				continue;
 			}
+			mpMeshes[meshId].TransformVertices(mCumulativeMatrix, start, end);
 		}
 	}	
 }

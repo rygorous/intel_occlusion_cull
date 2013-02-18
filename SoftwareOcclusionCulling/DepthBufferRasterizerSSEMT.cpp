@@ -69,7 +69,7 @@ void DepthBufferRasterizerSSEMT::IsVisible(UINT taskId, UINT taskCount)
 	GetWorkExtent(&start, &end, taskId, taskCount, mNumModels1);
 
 	for (UINT i = start; i < end; i++)
-		mpTransformedModels1[i].IsVisible(mpCamera);
+		mpTransformedModels1[i].IsVisible(mpCamera, mViewMatrix, mProjMatrix);
 }
 
 //------------------------------------------------------------------------------
@@ -143,7 +143,7 @@ void DepthBufferRasterizerSSEMT::TransformMeshes(UINT taskId, UINT taskCount)
         UINT thisSurfaceStartIndex = max( 0, (int)startIndex - (int)runningVertexCount );
         UINT thisSurfaceEndIndex   = min( thisSurfaceStartIndex + remainingVerticesPerTask, thisSurfaceVertexCount) - 1;
 
-		mpTransformedModels1[ss].TransformMeshes(mViewMatrix, mProjMatrix, thisSurfaceStartIndex, thisSurfaceEndIndex, mpCamera);
+		mpTransformedModels1[ss].TransformMeshes(thisSurfaceStartIndex, thisSurfaceEndIndex, mpCamera);
 
 		remainingVerticesPerTask -= (thisSurfaceEndIndex + 1 - thisSurfaceStartIndex);
         if( remainingVerticesPerTask <= 0 ) break;

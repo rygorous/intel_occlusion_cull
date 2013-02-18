@@ -44,7 +44,7 @@ void DepthBufferRasterizerSSEST::IsVisible(CPUTCamera* pCamera)
 	
 	for(UINT i = 0; i < mNumModels1; i++)
 	{
-		mpTransformedModels1[i].IsVisible(mpCamera);
+		mpTransformedModels1[i].IsVisible(mpCamera, mViewMatrix, mProjMatrix);
 	}
 }
 
@@ -83,7 +83,7 @@ void DepthBufferRasterizerSSEST::TransformMeshes()
     {
 		UINT thisSurfaceVertexCount = mpTransformedModels1[ss].GetNumVertices();
         
-        mpTransformedModels1[ss].TransformMeshes(mViewMatrix, mProjMatrix, 0, thisSurfaceVertexCount - 1, mpCamera);
+        mpTransformedModels1[ss].TransformMeshes(0, thisSurfaceVertexCount - 1, mpCamera);
     }
 }
 
