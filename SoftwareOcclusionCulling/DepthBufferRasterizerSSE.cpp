@@ -22,6 +22,7 @@ DepthBufferRasterizerSSE::DepthBufferRasterizerSSE()
 	  mpXformedPosOffset1(NULL),
 	  mpStartV1(NULL),
 	  mpStartT1(NULL),
+	  mpModelIndexA(NULL),
 	  mNumVertices1(0),
 	  mNumTriangles1(0),
 	  mpXformedPos1(NULL),
@@ -49,6 +50,7 @@ DepthBufferRasterizerSSE::~DepthBufferRasterizerSSE()
 	SAFE_DELETE_ARRAY(mpXformedPosOffset1);
 	SAFE_DELETE_ARRAY(mpStartV1);
 	SAFE_DELETE_ARRAY(mpStartT1)
+	SAFE_DELETE_ARRAY(mpModelIndexA);
 	_aligned_free(mpXformedPos1);
 	_aligned_free(mViewMatrix);
 	_aligned_free(mProjMatrix);
@@ -78,12 +80,14 @@ void DepthBufferRasterizerSSE::CreateTransformedModels(CPUTAssetSet **mpAssetSet
 
 	mpTransformedModels1 = new TransformedModelSSE[mNumModels1];
 	mpXformedPosOffset1 = new UINT[mNumModels1];
-	mpStartV1 = new UINT[mNumModels1];
-	mpStartT1 = new UINT[mNumModels1];
+	mpStartV1 = new UINT[mNumModels1 + 1];
+	mpStartT1 = new UINT[mNumModels1 + 1];
 
-	mpStartV1[0] = mpStartT1[0] = 0;
+	mpModelIndexA = new UINT[mNumModels1];
+
+	UINT modelId = 0;
 	
-	for(UINT assetId = 0, modelId = 0; assetId < numAssetSets; assetId++)
+	for(UINT assetId = 0; assetId < numAssetSets; assetId++)
 	{
 		for(UINT nodeId = 0; nodeId < mpAssetSet[assetId]->GetAssetCount(); nodeId++)
 		{
@@ -98,16 +102,10 @@ void DepthBufferRasterizerSSE::CreateTransformedModels(CPUTAssetSet **mpAssetSet
 			
 				mpXformedPosOffset1[modelId] = mpTransformedModels1[modelId].GetNumVertices();
 
-				if(modelId > 0)
-				{
-					mpStartV1[modelId] = mNumVertices1;				
-				}
+				mpStartV1[modelId] = mNumVertices1;
 				mNumVertices1 += mpTransformedModels1[modelId].GetNumVertices();
 
-				if(modelId > 0)
-				{
-					mpStartT1[modelId] = mNumTriangles1;
-				}
+				mpStartT1[modelId] = mNumTriangles1;
 				mNumTriangles1 += mpTransformedModels1[modelId].GetNumTriangles();
 				modelId++;
 			}
@@ -115,11 +113,11 @@ void DepthBufferRasterizerSSE::CreateTransformedModels(CPUTAssetSet **mpAssetSet
 		}
 	}
 
-	mpStartV1[0] = 0;
-	mpStartT1[0] = 0;
+	mpStartV1[modelId] = mNumVertices1;
+	mpStartT1[modelId] = mNumTriangles1;
 		
 	//for x, y, z, w
-	mpXformedPos1 = (__m128*)_aligned_malloc(sizeof(float )* 4 * mNumVertices1, 16);
+	mpXformedPos1 = (__m128*)_aligned_malloc(sizeof(float) * 4 * mNumVertices1, 16);
 	for(UINT i = 0; i < mNumModels1; i++)
 	{
 		mpTransformedModels1[i].SetXformedPos(&mpXformedPos1[mpStartV1[i]], mpStartV1[i]);

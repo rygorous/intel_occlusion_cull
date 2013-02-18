@@ -73,6 +73,20 @@ class DepthBufferRasterizerSSE : public DepthBufferRasterizer, public HelperSSE
 			}
 			return numRasterizedTris;
 		}
+
+		inline void ResetActive()
+		{
+			mNumModelsA = mNumVerticesA = mNumTrianglesA = 0;
+		}
+		inline void Activate(UINT modelId)
+		{
+			UINT activeId = mNumModelsA++;
+			assert(activeId < mNumModels1);
+
+			mpModelIndexA[activeId] = modelId;
+			mNumVerticesA += mpStartV1[modelId + 1] - mpStartV1[modelId];
+			mNumTrianglesA += mpStartT1[modelId + 1] - mpStartT1[modelId];
+		}
 		
 	protected:
 		TransformedModelSSE *mpTransformedModels1;
@@ -94,6 +108,11 @@ class DepthBufferRasterizerSSE : public DepthBufferRasterizer, public HelperSSE
 		USHORT *mpBinMesh;			 // mesh index
 		USHORT *mpNumTrisInBin;      // number of triangles in the bin
 		UINT mTimeCounter;
+
+		UINT *mpModelIndexA; // 'active' models = visible and not too small
+		UINT mNumModelsA;
+		UINT mNumVerticesA;
+		UINT mNumTrianglesA;
 
 		double mRasterizeTime[AVG_COUNTER];
 		CPUTTimerWin mRasterizeTimer;

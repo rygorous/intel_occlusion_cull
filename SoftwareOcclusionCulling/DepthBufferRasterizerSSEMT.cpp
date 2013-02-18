@@ -52,6 +52,11 @@ void DepthBufferRasterizerSSEMT::IsVisible(CPUTCamera* pCamera)
 	gTaskMgr.ReleaseHandle(mIsVisible);
 	mIsVisible = TASKSETHANDLE_INVALID;
 	
+	// Determine which models are active
+	ResetActive();
+	for (UINT i=0; i < mNumModels1; i++)
+		if(mpTransformedModels1[i].IsRasterized2DB())
+			Activate(i);
 }
 
 void DepthBufferRasterizerSSEMT::IsVisible(VOID *taskData, INT context, UINT taskId, UINT taskCount)
@@ -69,7 +74,9 @@ void DepthBufferRasterizerSSEMT::IsVisible(UINT taskId, UINT taskCount)
 	GetWorkExtent(&start, &end, taskId, taskCount, mNumModels1);
 
 	for (UINT i = start; i < end; i++)
+	{
 		mpTransformedModels1[i].IsVisible(mpCamera, mViewMatrix, mProjMatrix);
+	}
 }
 
 //------------------------------------------------------------------------------
@@ -118,17 +125,17 @@ void DepthBufferRasterizerSSEMT::TransformMeshes(VOID* taskData, INT context, UI
 //------------------------------------------------------------------------------------------------------------
 void DepthBufferRasterizerSSEMT::TransformMeshes(UINT taskId, UINT taskCount)
 {
-	UINT verticesPerTask  = mNumVertices1/taskCount;
-	verticesPerTask		  = (mNumVertices1 % taskCount) > 0 ? verticesPerTask + 1 : verticesPerTask;
+	UINT verticesPerTask  = mNumVerticesA/taskCount;
+	verticesPerTask		  = (mNumVerticesA % taskCount) > 0 ? verticesPerTask + 1 : verticesPerTask;
 	UINT startIndex		  = taskId * verticesPerTask;
-	//UINT endIndex		  = taskId == NUM_XFORMVERTS_TASKS - 1 ? mNumVertices1 : startIndex + verticesPerTask;
 
 	UINT remainingVerticesPerTask = verticesPerTask;
 
 	// Now, process all of the surfaces that contain this task's triangle range.
 	UINT runningVertexCount = 0;
-	for(UINT ss = 0; ss < mNumModels1; ss++)
+	for(UINT active = 0; active < mNumModelsA; active++)
     {
+		UINT ss = mpModelIndexA[active];
 		UINT thisSurfaceVertexCount = mpTransformedModels1[ss].GetNumVertices();
         
         UINT newRunningVertexCount = runningVertexCount + thisSurfaceVertexCount;
@@ -179,7 +186,7 @@ void DepthBufferRasterizerSSEMT::BinTransformedMeshes(UINT taskId, UINT taskCoun
     }
 
 	// Making sure that the #of Tris in each task (except the last one) is a multiple of 4 
-	UINT trianglesPerTask  = (mNumTriangles1 + taskCount - 1)/taskCount;
+	UINT trianglesPerTask  = (mNumTrianglesA + taskCount - 1)/taskCount;
 	trianglesPerTask      += (trianglesPerTask % SSE) != 0 ? SSE - (trianglesPerTask % SSE) : 0;
 	
 	UINT startIndex		   = taskId * trianglesPerTask;
@@ -188,8 +195,9 @@ void DepthBufferRasterizerSSEMT::BinTransformedMeshes(UINT taskId, UINT taskCoun
 
 	// Now, process all of the surfaces that contain this task's triangle range.
 	UINT runningTriangleCount = 0;
-	for(UINT ss = 0; ss < mNumModels1; ss++)
+	for(UINT active = 0; active < mNumModelsA; active++)
     {
+		UINT ss = mpModelIndexA[active];
 		UINT thisSurfaceTriangleCount = mpTransformedModels1[ss].GetNumTriangles();
         
         UINT newRunningTriangleCount = runningTriangleCount + thisSurfaceTriangleCount;
