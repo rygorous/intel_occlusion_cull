@@ -37,8 +37,12 @@ class DepthBufferRasterizerSSEMT : public DepthBufferRasterizerSSE
 		static void BinTransformedMeshes(VOID* taskData, INT context, UINT taskId, UINT taskCount);
 		void BinTransformedMeshes(UINT taskId, UINT taskCount); 
 
+		static void BinSort(VOID* taskData, INT context, UINT taskId, UINT taskCount);
+
 		static void RasterizeBinnedTrianglesToDepthBuffer(VOID* taskData, INT context, UINT taskId, UINT taskCount);
 		void RasterizeBinnedTrianglesToDepthBuffer(UINT taskId, UINT taskCount);
+
+		UINT mTileSequence[NUM_TILES];
 };
 
 #endif  //DEPTHBUFFERRASTERIZERSSEMT_H

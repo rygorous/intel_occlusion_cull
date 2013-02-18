@@ -89,17 +89,22 @@ void DepthBufferRasterizerSSEMT::TransformModelsAndRasterizeToDepthBuffer()
 {
 	mRasterizeTimer.StartTimer();
 	
+	TASKSETHANDLE sortBins;
+
 	gTaskMgr.CreateTaskSet(&DepthBufferRasterizerSSEMT::TransformMeshes, this, NUM_XFORMVERTS_TASKS, NULL, 0, "Xform Vertices", &mXformMesh);
 
 	gTaskMgr.CreateTaskSet(&DepthBufferRasterizerSSEMT::BinTransformedMeshes, this, NUM_XFORMVERTS_TASKS, &mXformMesh, 1, "Bin Meshes", &mBinMesh);
+
+	gTaskMgr.CreateTaskSet(&DepthBufferRasterizerSSEMT::BinSort, this, 1, &mBinMesh, 1, "BinSort", &sortBins);
 	
-	gTaskMgr.CreateTaskSet(&DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer, this, NUM_TILES, &mBinMesh, 1, "Raster Tris to DB", &mRasterize);	
+	gTaskMgr.CreateTaskSet(&DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer, this, NUM_TILES, &sortBins, 1, "Raster Tris to DB", &mRasterize);	
 
 	// Wait for the task set
 	gTaskMgr.WaitForSet(mRasterize);
 	// Release the task set
 	gTaskMgr.ReleaseHandle(mXformMesh);
 	gTaskMgr.ReleaseHandle(mBinMesh);
+	gTaskMgr.ReleaseHandle(sortBins);
 	gTaskMgr.ReleaseHandle(mRasterize);
 	mXformMesh = mBinMesh = mRasterize = TASKSETHANDLE_INVALID;
 
@@ -221,6 +226,36 @@ void DepthBufferRasterizerSSEMT::BinTransformedMeshes(UINT taskId, UINT taskCoun
     }
 }
 
+//--------------------------------------------------------------------------------------
+// This function sorts the tiles in order of decreasing number of triangles; since the
+// scheduler starts tasks roughly in order, the idea is to put the "fat tiles" first
+// and leave the small jobs for last. This is to avoid the pathological case where a
+// relatively big tile gets picked up late (as the other worker threads are about to
+// finish) and rendering effectively completes single-threaded.
+//--------------------------------------------------------------------------------------
+void DepthBufferRasterizerSSEMT::BinSort(VOID* taskData, INT context, UINT taskId, UINT taskCount)
+{
+	DepthBufferRasterizerSSEMT* me =  (DepthBufferRasterizerSSEMT*)taskData;
+
+	// Initialize sequence in sequential order and compute total number of triangles
+	// in the bins for each tile
+	UINT tileTotalTris[NUM_TILES];
+	for(UINT tile = 0; tile < NUM_TILES; tile++)
+	{
+		me->mTileSequence[tile] = tile;
+
+		UINT numTris = 0;
+		for (UINT bin = 0; bin < NUM_XFORMVERTS_TASKS; bin++)
+			numTris += me->mpNumTrisInBin[tile * NUM_XFORMVERTS_TASKS + bin];
+
+		tileTotalTris[tile] = numTris;
+	}
+
+	// Sort tiles by number of triangles, decreasing.
+	std::sort(me->mTileSequence, me->mTileSequence + NUM_TILES,
+		[&](const UINT a, const UINT b){ return tileTotalTris[a] > tileTotalTris[b]; });
+}
+
 void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(VOID* taskData, INT context, UINT taskId, UINT taskCount)
 {
 	DepthBufferRasterizerSSEMT* sample =  (DepthBufferRasterizerSSEMT*)taskData;
@@ -231,8 +266,10 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(VOID* tas
 // For each tile go through all the bins and process all the triangles in it.
 // Rasterize each triangle to the CPU depth buffer. 
 //-------------------------------------------------------------------------------
-void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT taskId, UINT taskCount)
+void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT rawTaskId, UINT taskCount)
 {
+	UINT taskId = mTileSequence[rawTaskId];
+
 	// Set DAZ and FZ MXCSR bits to flush denormals to zero (i.e., make it faster)
 	// Denormal are zero (DAZ) is bit 6 and Flush to zero (FZ) is bit 15. 
 	// so to enable the two to have to set bits 6 and 15 which 1000 0000 0100 0000 = 0x8040
