@@ -39,9 +39,9 @@ class TransformedAABBoxSSE : public HelperSSE
 		void CreateAABBVertexIndexList(CPUTModelDX11 *pModel);
 		void TransformAABBoxAndDepthTest();
 
-		bool IsTooSmall(const BoxTestSetup &setup);
+		bool IsTooSmall(const BoxTestSetup &setup, __m128 cumulativeMatrix[4]);
 
-		bool TransformAABBox(__m128 xformedPos[]);
+		bool TransformAABBox(__m128 xformedPos[], const __m128 cumulativeMatrix[4]);
 
 		bool RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels, const __m128 xformedPos[]);
 
@@ -49,7 +49,6 @@ class TransformedAABBoxSSE : public HelperSSE
 		CPUTModelDX11 *mpCPUTModel;
 		__m128 *mWorldMatrix;
 		__m128 *mpBBVertexList;
-		__m128 *mCumulativeMatrix; 
 
 		float3 mBBCenter;
 		float  mRadiusSq;

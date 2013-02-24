@@ -51,14 +51,15 @@ void AABBoxRasterizerSSEST::TransformAABBoxAndDepthTest()
 	setup.Init(mViewMatrix, mProjMatrix, mpCamera, mOccludeeSizeThreshold);
 
 	__m128 xformedPos[AABB_VERTICES];
+	__m128 cumulativeMatrix[4];
 
 	for(UINT i = 0; i < mNumModels; i++)
 	{
 		mpVisible[i] = false;
 	
-		if(mpBBoxVisible[i] && !mpTransformedAABBox[i].IsTooSmall(setup))
+		if(mpBBoxVisible[i] && !mpTransformedAABBox[i].IsTooSmall(setup, cumulativeMatrix))
 		{
-			if(mpTransformedAABBox[i].TransformAABBox(xformedPos))
+			if(mpTransformedAABBox[i].TransformAABBox(xformedPos, cumulativeMatrix))
 				mpVisible[i] = mpTransformedAABBox[i].RasterizeAndDepthTestAABBox(mpRenderTargetPixels, xformedPos);
 			else
 				mpVisible[i] = true;

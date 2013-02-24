@@ -65,14 +65,12 @@ TransformedAABBoxSSE::TransformedAABBoxSSE()
 {
 	mWorldMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
 	mpBBVertexList = (__m128*)_aligned_malloc(sizeof(float) * 4 * AABB_VERTICES, 16);
-	mCumulativeMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16); 
 }
 
 TransformedAABBoxSSE::~TransformedAABBoxSSE()
 {
 	_aligned_free(mWorldMatrix);
 	_aligned_free(mpBBVertexList);
-	_aligned_free(mCumulativeMatrix);
 }
 
 //--------------------------------------------------------------------------
@@ -111,12 +109,12 @@ void TransformedAABBoxSSE::CreateAABBVertexIndexList(CPUTModelDX11 *pModel)
 //----------------------------------------------------------------------------
 // Determine if the occluddee size is too small and if so avoid drawing it
 //----------------------------------------------------------------------------
-bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup)
+bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup, __m128 cumulativeMatrix[4])
 {
-	MatrixMultiply(mWorldMatrix, setup.mViewProjViewport, mCumulativeMatrix);
+	MatrixMultiply(mWorldMatrix, setup.mViewProjViewport, cumulativeMatrix);
 
 	__m128 center = _mm_set_ps(1.0f, mBBCenter.z, mBBCenter.y, mBBCenter.x);
-	__m128 mBBCenterOSxForm = TransformCoords(&center, mCumulativeMatrix);
+	__m128 mBBCenterOSxForm = TransformCoords(&center, cumulativeMatrix);
     float w = mBBCenterOSxForm.m128_f32[3];
 	if( w > 1.0f )
 	{
@@ -129,13 +127,13 @@ bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup)
 //----------------------------------------------------------------
 // Trasforms the AABB vertices to screen space once every frame
 //----------------------------------------------------------------
-bool TransformedAABBoxSSE::TransformAABBox(__m128 xformedPos[])
+bool TransformedAABBoxSSE::TransformAABBox(__m128 xformedPos[], const __m128 cumulativeMatrix[4])
 {
 	__m128 zAllIn = _mm_castsi128_ps(_mm_set1_epi32(~0));
 
 	for(UINT i = 0; i < AABB_VERTICES; i++)
 	{
-		__m128 vert = TransformCoords(&mpBBVertexList[i], mCumulativeMatrix);
+		__m128 vert = TransformCoords(&mpBBVertexList[i], cumulativeMatrix);
 
 		// We have inverted z; z is in front of near plane iff z <= w.
 		__m128 vertZ = _mm_shuffle_ps(vert, vert, 0xaa); // vert.zzzz
