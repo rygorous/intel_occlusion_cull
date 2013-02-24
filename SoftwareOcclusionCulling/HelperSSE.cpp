@@ -25,7 +25,7 @@ HelperSSE::~HelperSSE()
 {
 }
 
-__m128 HelperSSE::TransformCoords(__m128 *v, __m128 *m)
+__m128 HelperSSE::TransformCoords(const __m128 *v, const __m128 *m)
 {
 	__m128 vResult = _mm_shuffle_ps(*v, *v, _MM_SHUFFLE(0,0,0,0));
     vResult = _mm_mul_ps(vResult, m[0]);
@@ -44,7 +44,7 @@ __m128 HelperSSE::TransformCoords(__m128 *v, __m128 *m)
 }
 
 
-void HelperSSE::MatrixMultiply(__m128 *m1, __m128 *m2, __m128 *result)
+void HelperSSE::MatrixMultiply(const __m128 *m1, const __m128 *m2, __m128 *result)
 {
 	__m128 X, Y, Z, W;
 	float *mat = (float*)m1;

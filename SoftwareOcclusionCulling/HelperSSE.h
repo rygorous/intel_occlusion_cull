@@ -144,8 +144,8 @@ class HelperSSE
 			VecS32 W;
 		};
 
-		__m128 TransformCoords(__m128 *v, __m128 *m);
-		void MatrixMultiply(__m128 *m1, __m128 *m2, __m128 *result);
+		__m128 TransformCoords(const __m128 *v, const __m128 *m);
+		void MatrixMultiply(const __m128 *m1, const __m128 *m2, __m128 *result);
 };
 
 #endif 
