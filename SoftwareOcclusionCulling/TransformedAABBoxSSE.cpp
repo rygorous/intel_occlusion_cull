@@ -44,20 +44,29 @@ static const UINT sBBIndexList[AABB_INDICES] =
 	1, 6, 0,
 };
 
+void BoxTestSetup::Init(const __m128 viewMatrix[4], const __m128 projMatrix[4], CPUTCamera *pCamera, float occludeeSizeThreshold)
+{
+	__m128 viewPortMatrix[4];
+	viewPortMatrix[0] = _mm_loadu_ps((float*)&viewportMatrix.r0);
+	viewPortMatrix[1] = _mm_loadu_ps((float*)&viewportMatrix.r1);
+	viewPortMatrix[2] = _mm_loadu_ps((float*)&viewportMatrix.r2);
+	viewPortMatrix[3] = _mm_loadu_ps((float*)&viewportMatrix.r3);
+
+	MatrixMultiply(viewMatrix, projMatrix, mViewProjViewport);
+	MatrixMultiply(mViewProjViewport, viewPortMatrix, mViewProjViewport);
+
+	float fov = pCamera->GetFov();
+	float tanOfHalfFov = tanf(fov * 0.5f);
+	radiusThreshold = occludeeSizeThreshold * occludeeSizeThreshold * tanOfHalfFov;
+}
+
 TransformedAABBoxSSE::TransformedAABBoxSSE()
-	: mpCPUTModel(NULL),
-	  mOccludeeSizeThreshold(0.0f)
+	: mpCPUTModel(NULL)
 {
 	mWorldMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
 	mpBBVertexList = (__m128*)_aligned_malloc(sizeof(float) * 4 * AABB_VERTICES, 16);
 	mpXformedPos =  (__m128*)_aligned_malloc(sizeof(float) * 4 * AABB_VERTICES, 16);
-	mViewPortMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
 	mCumulativeMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16); 
-
-	mViewPortMatrix[0] = _mm_loadu_ps((float*)&viewportMatrix.r0);
-	mViewPortMatrix[1] = _mm_loadu_ps((float*)&viewportMatrix.r1);
-	mViewPortMatrix[2] = _mm_loadu_ps((float*)&viewportMatrix.r2);
-	mViewPortMatrix[3] = _mm_loadu_ps((float*)&viewportMatrix.r3);
 }
 
 TransformedAABBoxSSE::~TransformedAABBoxSSE()
@@ -65,7 +74,6 @@ TransformedAABBoxSSE::~TransformedAABBoxSSE()
 	_aligned_free(mWorldMatrix);
 	_aligned_free(mpBBVertexList);
 	_aligned_free(mpXformedPos);
-	_aligned_free(mViewPortMatrix);
 	_aligned_free(mCumulativeMatrix);
 }
 
@@ -83,10 +91,12 @@ void TransformedAABBoxSSE::CreateAABBVertexIndexList(CPUTModelDX11 *pModel)
 	mWorldMatrix[2] = _mm_loadu_ps(world + 8);
 	mWorldMatrix[3] = _mm_loadu_ps(world + 12);
 
-	pModel->GetBoundsObjectSpace(&mBBCenter, &mBBHalf);
+	float3 bbHalf;
+	pModel->GetBoundsObjectSpace(&mBBCenter, &bbHalf);
+	mRadiusSq = bbHalf.lengthSq();
 
-	float3 min = mBBCenter - mBBHalf;
-	float3 max = mBBCenter + mBBHalf;
+	float3 min = mBBCenter - bbHalf;
+	float3 max = mBBCenter + bbHalf;
 	
 	//Top 4 vertices in BB
 	mpBBVertexList[0] = _mm_set_ps(1.0f, max.z, max.y, max.x);
@@ -103,25 +113,16 @@ void TransformedAABBoxSSE::CreateAABBVertexIndexList(CPUTModelDX11 *pModel)
 //----------------------------------------------------------------------------
 // Determine if the occluddee size is too small and if so avoid drawing it
 //----------------------------------------------------------------------------
-bool TransformedAABBoxSSE::IsTooSmall(__m128 *pViewMatrix, __m128 *pProjMatrix, CPUTCamera *pCamera)
+bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup)
 {
-	float radius = mBBHalf.lengthSq(); // Use length-squared to avoid sqrt().  Relative comparissons hold.
-	float fov = pCamera->GetFov();
-	float tanOfHalfFov = tanf(fov * 0.5f);
-
-	MatrixMultiply(mWorldMatrix, pViewMatrix, mCumulativeMatrix);
-	MatrixMultiply(mCumulativeMatrix, pProjMatrix, mCumulativeMatrix);
-	MatrixMultiply(mCumulativeMatrix, mViewPortMatrix, mCumulativeMatrix);
+	MatrixMultiply(mWorldMatrix, setup.mViewProjViewport, mCumulativeMatrix);
 
 	__m128 center = _mm_set_ps(1.0f, mBBCenter.z, mBBCenter.y, mBBCenter.x);
 	__m128 mBBCenterOSxForm = TransformCoords(&center, mCumulativeMatrix);
     float w = mBBCenterOSxForm.m128_f32[3];
 	if( w > 1.0f )
 	{
-		float radiusDivW = radius / w;
-		float r2DivW2DivTanFov = radiusDivW / tanOfHalfFov;
-
-		return r2DivW2DivTanFov < (mOccludeeSizeThreshold * mOccludeeSizeThreshold) ?  true : false;
+		return mRadiusSq < w * setup.radiusThreshold;
 	}
 
 	return false;

@@ -90,6 +90,9 @@ void AABBoxRasterizerSSEMT::TransformAABBoxAndDepthTest()
 //--------------------------------------------------------------------------------
 void AABBoxRasterizerSSEMT::TransformAABBoxAndDepthTest(UINT taskId)
 {
+	BoxTestSetup setup;
+	setup.Init(mViewMatrix, mProjMatrix, mpCamera, mOccludeeSizeThreshold);
+
 	static const UINT kChunkSize = 64;
 	for(UINT base = taskId*kChunkSize; base < mNumModels; base += mNumDepthTestTasks * kChunkSize)
 	{
@@ -98,7 +101,7 @@ void AABBoxRasterizerSSEMT::TransformAABBoxAndDepthTest(UINT taskId)
 		{
 			mpVisible[i] = false;
 
-			if(mpBBoxVisible[i] && !mpTransformedAABBox[i].IsTooSmall(mViewMatrix, mProjMatrix, mpCamera))
+			if(mpBBoxVisible[i] && !mpTransformedAABBox[i].IsTooSmall(setup))
 			{
 				if(mpTransformedAABBox[i].TransformAABBox())
 					mpVisible[i] = mpTransformedAABBox[i].RasterizeAndDepthTestAABBox(mpRenderTargetPixels);

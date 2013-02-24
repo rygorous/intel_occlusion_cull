@@ -47,13 +47,7 @@ class AABBoxRasterizerSSE : public AABBoxRasterizer
 		void SetViewProjMatrix(float4x4 *viewMatrix, float4x4 *projMatrix);
 		inline void SetCPURenderTargetPixels(UINT *pRenderTargetPixels){mpRenderTargetPixels = pRenderTargetPixels;}
 		inline void SetDepthTestTasks(UINT numTasks) {mNumDepthTestTasks = numTasks;}
-		inline void SetOccludeeSizeThreshold(float occludeeSizeThreshold)
-		{
-			for(UINT i = 0; i < mNumModels; i++)
-			{
-				mpTransformedAABBox[i].SetOccludeeSizeThreshold(occludeeSizeThreshold);
-			}
-		}
+		inline void SetOccludeeSizeThreshold(float occludeeSizeThreshold) {mOccludeeSizeThreshold = occludeeSizeThreshold;}
 		inline void SetCamera(CPUTCamera *pCamera) {mpCamera = pCamera;}
 
 		inline UINT GetNumOccludees() {return mNumModels;}
