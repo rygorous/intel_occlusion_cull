@@ -91,7 +91,7 @@ public:
 	}
 };
 
-static RunStatistics g_renderTime, g_testTime;
+static RunStatistics g_totalCullTime, g_renderTime, g_testTime;
 
 #endif
 
@@ -138,7 +138,7 @@ void MySample::Create()
 	mpOccluderSizeSlider->SetScale(0, 5.0, 51);
 	mpOccluderSizeSlider->SetValue(mOccluderSizeThreshold);
 	mpOccluderSizeSlider->SetTickDrawing(false);
-    
+
 	pGUI->CreateText(_L("Occludees                                              \t"), ID_OCCLUDEES, ID_MAIN_PANEL, &mpOccludeesText);
 
 	swprintf_s(&string[0], CPUT_MAX_STRING_LENGTH, _L("\tNumber of Models: \t%d"), mNumOccludees);
@@ -167,6 +167,9 @@ void MySample::Create()
 	mpOccludeeSizeSlider->SetScale(0, 0.1f, 41);
 	mpOccludeeSizeSlider->SetValue(mOccludeeSizeThreshold);
 	mpOccludeeSizeSlider->SetTickDrawing(false);
+
+	swprintf_s(&string[0], CPUT_MAX_STRING_LENGTH, _L("\tTotal cull time: \t%0.2f"), mTotalCullTime);
+	pGUI->CreateText(string, ID_TOTAL_CULL_TIME, ID_MAIN_PANEL, &mpTotalCullTimeText);
 
 	pGUI->CreateCheckbox(_L("Depth Test Culling"),  ID_ENABLE_CULLING, ID_MAIN_PANEL, &mpCullingCheckBox);
 	pGUI->CreateCheckbox(_L("Frustum Culling"),  ID_ENABLE_FCULLING, ID_MAIN_PANEL, &mpFCullingCheckBox);
@@ -737,6 +740,7 @@ void MySample::HandleCallbackEvent( CPUTEventID Event, CPUTControlID ControlID, 
 			mpCulledTrisText->SetText(   _L("\tCulled tris: \t\t0"));
 			mpVisibleTrisText->SetText(   _L("\tVisible tris: \t\t0"));
 			mpDepthTestTimeText->SetText(_L("\tDepth test time: \t0 ms"));
+			mpTotalCullTimeText->SetText(_L("\tTotal cull time: \t0 ms"));
 		}
 		break;
 	}
@@ -822,6 +826,9 @@ void MySample::Render(double deltaSeconds)
 	mpCamera->SetFarPlaneDistance(gFarClipDistance);
 	mpCamera->Update();
 
+	// Start timer
+	mTotalCullTimer.StartTimer();
+
 	// Set the camera transforms so that the occluders can be transformed
 	mpDBR->SetViewProj(mpCamera->GetViewMatrix(), (float4x4*)mpCamera->GetProjectionMatrix());
 
@@ -855,6 +862,8 @@ void MySample::Render(double deltaSeconds)
 		// Set the camera transforms so that the occludee abix aligned bounding boxes (AABB) can be transformed
 		mpAABB->SetViewProjMatrix(mpCamera->GetViewMatrix(), (float4x4*)mpCamera->GetProjectionMatrix());
 	}
+
+	mTotalCullTime = mTotalCullTimer.StopTimer();
 
 	// If mViewDepthBuffer is enabled then blit the CPU rasterized depth buffer to the frame buffer
 	if(mViewDepthBuffer)
@@ -925,6 +934,9 @@ void MySample::Render(double deltaSeconds)
 
 		swprintf_s(&string[0], CPUT_MAX_STRING_LENGTH, _L("\tDepth test time: \t%0.2f ms"), mDepthTestTime * 1000.0f);
 		mpDepthTestTimeText->SetText(string);		
+
+		swprintf_s(&string[0], CPUT_MAX_STRING_LENGTH, _L("\tTotal cull time: \t%0.2f ms"), mTotalCullTime * 1000.0f);
+		mpTotalCullTimeText->SetText(string);
 	}
 
 	swprintf_s(&string[0], CPUT_MAX_STRING_LENGTH, _L("Number of draw calls: \t\t %d"), mNumDrawCalls);
@@ -945,6 +957,7 @@ void MySample::Render(double deltaSeconds)
 
 	if (frame >= initialDelay)
 	{
+		g_totalCullTime.record((float) (mTotalCullTime * 1000.0f));
 		g_renderTime.record((float) (mRasterizeTime * 1000.0f));
 		g_testTime.record((float) (mDepthTestTime * 1000.0f));
 
@@ -954,6 +967,8 @@ void MySample::Render(double deltaSeconds)
 			__itt_pause();
 #endif
 
+			dprintf("Total cull time:\n");
+			g_totalCullTime.summarize();
 			dprintf("Render time:\n");
 			g_renderTime.summarize();
 			dprintf("Test time:\n");

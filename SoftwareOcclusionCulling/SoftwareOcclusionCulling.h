@@ -77,6 +77,8 @@ private:
 	CPUTText			  *mpDepthTestTimeText;
 	CPUTSlider			  *mpOccludeeSizeSlider;
 
+	CPUTText			  *mpTotalCullTimeText;
+
 	CPUTCheckbox		  *mpCullingCheckBox;
 	CPUTCheckbox		  *mpFCullingCheckBox;
 	CPUTCheckbox		  *mpDBCheckBox;
@@ -128,6 +130,8 @@ private:
 	double				mDepthTestTime;
 	float				mOccludeeSizeThreshold;
 
+	double				mTotalCullTime;
+
 	bool				mEnableCulling;
 	bool				mEnableFCulling;
 	bool				mViewDepthBuffer;
@@ -136,6 +140,8 @@ private:
 
 	UINT				mNumDrawCalls;
 	UINT				mNumDepthTestTasks;
+
+	CPUTTimerWin		mTotalCullTimer;
 
 public:
     MySample() :
@@ -151,6 +157,7 @@ public:
 		mpOccluderTrisText(NULL),
 		mpOccluderRasterizedTrisText(NULL),
 		mpRasterizeTimeText(NULL),
+		mpTotalCullTimeText(NULL),
 		mpOccluderSizeSlider(NULL),
 		mpOccludeesText(NULL),
 		mpNumOccludeesText(NULL),
@@ -194,7 +201,8 @@ public:
 		mViewBoundingBox(false),
 		mEnableTasks(true),
 		mNumDrawCalls(0),
-		mNumDepthTestTasks(20)
+		mNumDepthTestTasks(20),
+		mTotalCullTime(0.0)
     {
 		for(UINT i = 0; i < OCCLUDER_SETS; i++)
 		{
@@ -304,6 +312,8 @@ public:
 	static const CPUTControlID ID_NUM_OCCLUDER_RASTERIZED_TRIS = 1600;
 	static const CPUTControlID ID_RASTERIZE_TIME = 1700;
 	static const CPUTControlID ID_OCCLUDER_SIZE = 1800;
+
+	static const CPUTControlID ID_TOTAL_CULL_TIME = 1850;
 
 	static const CPUTControlID ID_OCCLUDEES = 1900;
 	static const CPUTControlID ID_NUM_OCCLUDEES = 2000;
