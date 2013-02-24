@@ -44,6 +44,11 @@ static const UINT sBBIndexList[AABB_INDICES] =
 	1, 6, 0,
 };
 
+// 0 = use min corner, 1 = use max corner
+static const UINT sBBxInd[AABB_VERTICES] = { 1, 0, 0, 1, 1, 1, 0, 0 };
+static const UINT sBByInd[AABB_VERTICES] = { 1, 1, 1, 1, 0, 0, 0, 0 };
+static const UINT sBBzInd[AABB_VERTICES] = { 1, 1, 0, 0, 0, 1, 1, 0 };
+
 void BoxTestSetup::Init(const __m128 viewMatrix[4], const __m128 projMatrix[4], CPUTCamera *pCamera, float occludeeSizeThreshold)
 {
 	__m128 viewPortMatrix[4];
@@ -64,13 +69,11 @@ TransformedAABBoxSSE::TransformedAABBoxSSE()
 	: mpCPUTModel(NULL)
 {
 	mWorldMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
-	mpBBVertexList = (__m128*)_aligned_malloc(sizeof(float) * 4 * AABB_VERTICES, 16);
 }
 
 TransformedAABBoxSSE::~TransformedAABBoxSSE()
 {
 	_aligned_free(mWorldMatrix);
-	_aligned_free(mpBBVertexList);
 }
 
 //--------------------------------------------------------------------------
@@ -87,23 +90,8 @@ void TransformedAABBoxSSE::CreateAABBVertexIndexList(CPUTModelDX11 *pModel)
 	mWorldMatrix[2] = _mm_loadu_ps(world + 8);
 	mWorldMatrix[3] = _mm_loadu_ps(world + 12);
 
-	float3 bbHalf;
-	pModel->GetBoundsObjectSpace(&mBBCenter, &bbHalf);
-	mRadiusSq = bbHalf.lengthSq();
-
-	float3 min = mBBCenter - bbHalf;
-	float3 max = mBBCenter + bbHalf;
-	
-	//Top 4 vertices in BB
-	mpBBVertexList[0] = _mm_set_ps(1.0f, max.z, max.y, max.x);
-	mpBBVertexList[1] = _mm_set_ps(1.0f, max.z, max.y, min.x); 
-	mpBBVertexList[2] = _mm_set_ps(1.0f, min.z, max.y, min.x);
-	mpBBVertexList[3] = _mm_set_ps(1.0f, min.z, max.y, max.x);
-	// Bottom 4 vertices in BB
-	mpBBVertexList[4] = _mm_set_ps(1.0f, min.z, min.y, max.x);
-	mpBBVertexList[5] = _mm_set_ps(1.0f, max.z, min.y, max.x);
-	mpBBVertexList[6] = _mm_set_ps(1.0f, max.z, min.y, min.x);
-	mpBBVertexList[7] = _mm_set_ps(1.0f, min.z, min.y, min.x);
+	pModel->GetBoundsObjectSpace(&mBBCenter, &mBBHalf);
+	mRadiusSq = mBBHalf.lengthSq();
 }
 
 //----------------------------------------------------------------------------
@@ -129,11 +117,31 @@ bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup, __m128 cumulati
 //----------------------------------------------------------------
 bool TransformedAABBoxSSE::TransformAABBox(__m128 xformedPos[], const __m128 cumulativeMatrix[4])
 {
+	// w ends up being garbage, but it doesn't matter - we ignore it anyway.
+	__m128 vCenter = _mm_loadu_ps(&mBBCenter.x);
+	__m128 vHalf   = _mm_loadu_ps(&mBBHalf.x);
+
+	__m128 vMin    = _mm_sub_ps(vCenter, vHalf);
+	__m128 vMax    = _mm_add_ps(vCenter, vHalf);
+
+	// transforms
+	__m128 xRow[2], yRow[2], zRow[2];
+	xRow[0] = _mm_shuffle_ps(vMin, vMin, 0x00) * cumulativeMatrix[0];
+	xRow[1] = _mm_shuffle_ps(vMax, vMax, 0x00) * cumulativeMatrix[0];
+	yRow[0] = _mm_shuffle_ps(vMin, vMin, 0x55) * cumulativeMatrix[1];
+	yRow[1] = _mm_shuffle_ps(vMax, vMax, 0x55) * cumulativeMatrix[1];
+	zRow[0] = _mm_shuffle_ps(vMin, vMin, 0xaa) * cumulativeMatrix[2];
+	zRow[1] = _mm_shuffle_ps(vMax, vMax, 0xaa) * cumulativeMatrix[2];
+
 	__m128 zAllIn = _mm_castsi128_ps(_mm_set1_epi32(~0));
 
 	for(UINT i = 0; i < AABB_VERTICES; i++)
 	{
-		__m128 vert = TransformCoords(&mpBBVertexList[i], cumulativeMatrix);
+		// Transform the vertex
+		__m128 vert = cumulativeMatrix[3];
+		vert += xRow[sBBxInd[i]];
+		vert += yRow[sBByInd[i]];
+		vert += zRow[sBBzInd[i]];
 
 		// We have inverted z; z is in front of near plane iff z <= w.
 		__m128 vertZ = _mm_shuffle_ps(vert, vert, 0xaa); // vert.zzzz

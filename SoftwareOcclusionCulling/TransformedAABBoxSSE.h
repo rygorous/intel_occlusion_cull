@@ -48,9 +48,9 @@ class TransformedAABBoxSSE : public HelperSSE
 	private:
 		CPUTModelDX11 *mpCPUTModel;
 		__m128 *mWorldMatrix;
-		__m128 *mpBBVertexList;
 
 		float3 mBBCenter;
+		float3 mBBHalf;
 		float  mRadiusSq;
 
 		void Gather(vFloat4 pOut[3], UINT triId, const __m128 xformedPos[]);
