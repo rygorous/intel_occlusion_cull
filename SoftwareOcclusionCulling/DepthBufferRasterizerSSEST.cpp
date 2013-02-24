@@ -140,6 +140,8 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
 	int tileStartY = tileY * TILE_HEIGHT_IN_PIXELS;
 	int tileEndY   = tileStartY + TILE_HEIGHT_IN_PIXELS;
 
+	ClearDepthTile(tileStartX, tileStartY, tileEndX, tileEndY);
+
 	UINT bin = 0;
 	UINT binIndex = 0;
 	UINT offset1 = YOFFSET1_ST * tileY + XOFFSET1_ST * tileX;

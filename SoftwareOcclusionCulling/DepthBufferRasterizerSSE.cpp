@@ -124,6 +124,25 @@ void DepthBufferRasterizerSSE::CreateTransformedModels(CPUTAssetSet **mpAssetSet
 	}
 }
 
+//--------------------------------------------------------------------
+// Clear depth buffer for a tile
+//--------------------------------------------------------------------
+void DepthBufferRasterizerSSE::ClearDepthTile(int startX, int startY, int endX, int endY)
+{
+	assert(startX % 2 == 0 && startY % 2 == 0);
+	assert(endX % 2 == 0 && endY % 2 == 0);
+
+	float* pDepthBuffer = (float*)mpRenderTargetPixels;
+	int width = endX - startX;
+
+	// Note we need to account for tiling pattern here
+	for(int r = startY; r < endY; r += 2)
+	{
+		int rowIdx = r * SCREENW + 2 * startX;
+		memset(&pDepthBuffer[rowIdx], 0, sizeof(float) * 2 * width);
+	}
+}
+
 void DepthBufferRasterizerSSE::SetViewProj(float4x4 *viewMatrix, float4x4 *projMatrix)
 {
 	mViewMatrix[0] = _mm_loadu_ps((float*)&viewMatrix->r0);

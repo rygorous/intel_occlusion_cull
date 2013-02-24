@@ -27,6 +27,9 @@ class DepthBufferRasterizerSSE : public DepthBufferRasterizer, public HelperSSE
 		virtual ~DepthBufferRasterizerSSE();
 		
 		void CreateTransformedModels(CPUTAssetSet **pAssetSet, UINT numAssetSets);
+
+		// start inclusive, end exclusive
+		void ClearDepthTile(int startX, int startY, int endX, int endY);
 		
 		// Reset all models to be visible when frustum culling is disabled 
 		inline void ResetInsideFrustum()

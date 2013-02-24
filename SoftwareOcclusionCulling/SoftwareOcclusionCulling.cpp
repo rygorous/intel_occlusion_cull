@@ -844,9 +844,8 @@ void MySample::Render(double deltaSeconds)
 	// if software occlusion culling is enabled
 	if(mEnableCulling)
 	{
-		// Clear the depth buffer
+		// Set the depth buffer
 		mpCPURenderTargetPixels = (UINT*)mpCPUDepthBuf;
-		memset(mpCPURenderTargetPixels, 0, SCREENW * SCREENH * 4);
 		mpDBR->SetCPURenderTargetPixels(mpCPURenderTargetPixels);
 		// Transform the occluder models and rasterize them to the depth buffer
 		mpDBR->TransformModelsAndRasterizeToDepthBuffer();
