@@ -41,21 +41,20 @@ class TransformedAABBoxSSE : public HelperSSE
 
 		bool IsTooSmall(const BoxTestSetup &setup);
 
-		bool TransformAABBox();
+		bool TransformAABBox(__m128 xformedPos[]);
 
-		bool RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels);
+		bool RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels, const __m128 xformedPos[]);
 
 	private:
 		CPUTModelDX11 *mpCPUTModel;
 		__m128 *mWorldMatrix;
 		__m128 *mpBBVertexList;
-		__m128 *mpXformedPos;
 		__m128 *mCumulativeMatrix; 
 
 		float3 mBBCenter;
 		float  mRadiusSq;
 
-		void Gather(vFloat4 pOut[3], UINT triId);
+		void Gather(vFloat4 pOut[3], UINT triId, const __m128 xformedPos[]);
 };
 
 
