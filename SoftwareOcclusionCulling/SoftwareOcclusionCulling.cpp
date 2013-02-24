@@ -822,6 +822,9 @@ void MySample::Render(double deltaSeconds)
 	mpCamera->SetFarPlaneDistance(gFarClipDistance);
 	mpCamera->Update();
 
+	// Set the camera transforms so that the occluders can be transformed
+	mpDBR->SetViewProj(mpCamera->GetViewMatrix(), (float4x4*)mpCamera->GetProjectionMatrix());
+
 	// If view frustum culling is enabled then determine which occluders and occludees are 
 	// inside the view frustum and run the software occlusion culling on only the those models
 	if(mEnableFCulling)
@@ -834,13 +837,6 @@ void MySample::Render(double deltaSeconds)
 	// if software occlusion culling is enabled
 	if(mEnableCulling)
 	{
-		mpCamera->SetNearPlaneDistance(gFarClipDistance);
-		mpCamera->SetFarPlaneDistance(1.0f);
-		mpCamera->Update();
-		
-		// Set the camera transforms so that the occluders can be transformed 
-		mpDBR->SetViewProj(mpCamera->GetViewMatrix(), (float4x4*)mpCamera->GetProjectionMatrix());
-	
 		// Clear the depth buffer
 		mpCPURenderTargetPixels = (UINT*)mpCPUDepthBuf;
 		memset(mpCPURenderTargetPixels, 0, SCREENW * SCREENH * 4);
@@ -853,10 +849,6 @@ void MySample::Render(double deltaSeconds)
 		mpAABB->SetCPURenderTargetPixels(mpCPURenderTargetPixels);
 		// Transform the occludee AABB, rasterize and depth test to determine is occludee is visible or occluded 
 		mpAABB->TransformAABBoxAndDepthTest();
-				
-		mpCamera->SetNearPlaneDistance(1.0f);
-		mpCamera->SetFarPlaneDistance(gFarClipDistance);
-		mpCamera->Update();
 	}
 	else
 	{

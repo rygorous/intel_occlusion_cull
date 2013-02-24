@@ -59,8 +59,8 @@ const int AABB_TRIANGLES = 12;
 const float4x4 viewportMatrix(
     0.5f*(float)SCREENW,                 0.0f,  0.0f, 0.0f,
                    0.0f, -0.5f*(float)SCREENH,  0.0f, 0.0f,
-                   0.0f,                 0.0f, -1.0f, 0.0f,
-    0.5f*(float)SCREENW,  0.5f*(float)SCREENH,  1.0f, 1.0f
+                   0.0f,                 0.0f,  1.0f, 0.0f,
+    0.5f*(float)SCREENW,  0.5f*(float)SCREENH,  0.0f, 1.0f
 );
 
 const int OCCLUDER_SETS = 3;
