@@ -33,7 +33,7 @@ class TransformedAABBoxSSE : public HelperSSE
 
 		bool IsTooSmall(__m128 *pViewMatrix, __m128 *pProjMatrix, CPUTCamera *pCamera);
 
-		void TransformAABBox();
+		bool TransformAABBox();
 
 		bool RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels);
 

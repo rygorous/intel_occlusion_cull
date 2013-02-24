@@ -53,8 +53,10 @@ void AABBoxRasterizerSSEST::TransformAABBoxAndDepthTest()
 	
 		if(mpBBoxVisible[i] && !mpTransformedAABBox[i].IsTooSmall(mViewMatrix, mProjMatrix, mpCamera))
 		{
-			mpTransformedAABBox[i].TransformAABBox();
-			mpVisible[i] = mpTransformedAABBox[i].RasterizeAndDepthTestAABBox(mpRenderTargetPixels);
+			if(mpTransformedAABBox[i].TransformAABBox())
+				mpVisible[i] = mpTransformedAABBox[i].RasterizeAndDepthTestAABBox(mpRenderTargetPixels);
+			else
+				mpVisible[i] = true;
 		}		
 	}
 	mDepthTestTime[mTimeCounter++] = mDepthTestTimer.StopTimer();

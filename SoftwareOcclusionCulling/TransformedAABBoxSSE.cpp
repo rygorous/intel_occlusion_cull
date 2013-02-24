@@ -130,15 +130,26 @@ bool TransformedAABBoxSSE::IsTooSmall(__m128 *pViewMatrix, __m128 *pProjMatrix, 
 //----------------------------------------------------------------
 // Trasforms the AABB vertices to screen space once every frame
 //----------------------------------------------------------------
-void TransformedAABBoxSSE::TransformAABBox()
+bool TransformedAABBoxSSE::TransformAABBox()
 {
+	__m128 zAllIn = _mm_castsi128_ps(_mm_set1_epi32(~0));
+
 	for(UINT i = 0; i < AABB_VERTICES; i++)
 	{
-		mpXformedPos[i] = TransformCoords(&mpBBVertexList[i], mCumulativeMatrix);
-		float oneOverW = 1.0f/max(mpXformedPos[i].m128_f32[3], 0.0000001f);
-		mpXformedPos[i] = mpXformedPos[i] * oneOverW;
-		mpXformedPos[i].m128_f32[3] = oneOverW;
+		__m128 vert = TransformCoords(&mpBBVertexList[i], mCumulativeMatrix);
+
+		// We have inverted z; z is in front of near plane iff z <= w.
+		__m128 vertZ = _mm_shuffle_ps(vert, vert, 0xaa); // vert.zzzz
+		__m128 vertW = _mm_shuffle_ps(vert, vert, 0xff); // vert.wwww
+		__m128 zIn = _mm_cmple_ps(vertZ, vertW);
+		zAllIn = _mm_and_ps(zAllIn, zIn);
+
+		// project
+		mpXformedPos[i] = _mm_div_ps(vert, vertW);
 	}
+
+	// return true if and only if none of the verts are z-clipped
+	return _mm_movemask_ps(zAllIn) == 0xf;
 }
 
 void TransformedAABBoxSSE::Gather(vFloat4 pOut[3], UINT triId)
@@ -220,22 +231,6 @@ bool TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 
 		VecS32 startY = vmax(vmin(vmin(fixY[0], fixY[1]), fixY[2]), VecS32(0)) & VecS32(~1);
 		VecS32 endY   = vmin(vmax(vmax(fixY[0], fixY[1]), fixY[2]), VecS32(SCREENH - 1));
-
-		for(int vv = 0; vv < 3; vv++) 
-		{
-            // If W (holding 1/w in our case) is not between 0 and 1,
-            // then vertex is behind near clip plane (1.0 in our case.
-            // If W < 1, then verify 1/W > 1 (for W>0), and 1/W < 0 (for W < 0).
-		    VecF32 nearClipMask0 = cmple(xformedPos[vv].W, VecF32(0.0f));
-		    VecF32 nearClipMask1 = cmpge(xformedPos[vv].W, VecF32(1.0f));
-			VecS32 nearClipMask = float2bits(or(nearClipMask0, nearClipMask1));
-
-			if(!is_all_zeros(nearClipMask))
-			{
-                // All four vertices are behind the near plane (we're processing four triangles at a time w/ SSE)
-				return true;
-			}
-		}
 
 		// Now we have 4 triangles set up.  Rasterize them each individually.
         for(int lane=0; lane < SSE; lane++)
