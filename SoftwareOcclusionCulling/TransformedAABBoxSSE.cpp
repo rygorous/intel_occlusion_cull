@@ -46,7 +46,6 @@ static const UINT sBBIndexList[AABB_INDICES] =
 
 TransformedAABBoxSSE::TransformedAABBoxSSE()
 	: mpCPUTModel(NULL),
-	  mVisible(NULL),
 	  mOccludeeSizeThreshold(0.0f)
 {
 	mWorldMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
@@ -162,7 +161,7 @@ void TransformedAABBoxSSE::Gather(vFloat4 pOut[3], UINT triId)
 // If any of the rasterized AABB pixels passes the depth test exit early and mark the occludee
 // as visible. If all rasterized AABB pixels are occluded then the occludee is culled
 //-----------------------------------------------------------------------------------------
-void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels)
+bool TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels)
 {
 	// Set DAZ and FZ MXCSR bits to flush denormals to zero (i.e., make it faster)
 	// Denormal are zero (DAZ) is bit 6 and Flush to zero (FZ) is bit 15. 
@@ -234,8 +233,7 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 			if(!is_all_zeros(nearClipMask))
 			{
                 // All four vertices are behind the near plane (we're processing four triangles at a time w/ SSE)
-                *mVisible = true;
-                return;
+				return true;
 			}
 		}
 
@@ -322,10 +320,11 @@ void TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 
 				if(!_mm_testz_si128(anyOut.simd, _mm_set1_epi32(0x80000000)))
 				{
-					*mVisible = true;
-					return; //early exit
+					return true; //early exit
 				}
 			}// for each row
 		}// for each triangle
 	}// for each set of SIMD# triangles
+
+	return false;
 }

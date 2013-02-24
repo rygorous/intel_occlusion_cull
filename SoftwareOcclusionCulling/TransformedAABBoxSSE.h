@@ -35,9 +35,8 @@ class TransformedAABBoxSSE : public HelperSSE
 
 		void TransformAABBox();
 
-		void RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels);
+		bool RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels);
 
-		inline void SetVisible(bool *visible){mVisible = visible;}
 		inline void SetOccludeeSizeThreshold(float occludeeSizeThreshold){mOccludeeSizeThreshold = occludeeSizeThreshold;}
 
 	private:
@@ -46,7 +45,6 @@ class TransformedAABBoxSSE : public HelperSSE
 		__m128 *mpBBVertexList;
 		__m128 *mpXformedPos;
 		__m128 *mCumulativeMatrix; 
-		bool   *mVisible;
 		float   mOccludeeSizeThreshold;
 		__m128 *mViewPortMatrix; 
 
