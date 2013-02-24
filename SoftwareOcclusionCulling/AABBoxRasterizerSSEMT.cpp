@@ -90,32 +90,20 @@ void AABBoxRasterizerSSEMT::TransformAABBoxAndDepthTest()
 //--------------------------------------------------------------------------------
 void AABBoxRasterizerSSEMT::TransformAABBoxAndDepthTest(UINT taskId)
 {
-	UINT numRemainingModels = mNumModels % mNumDepthTestTasks;
-
-	UINT numModelsPerTask1 = mNumModels / mNumDepthTestTasks + 1;
-	UINT numModelsPerTask2 = mNumModels / mNumDepthTestTasks;
-
-	UINT start, end;
-	if(taskId < numRemainingModels)
+	static const UINT kChunkSize = 64;
+	for(UINT base = taskId*kChunkSize; base < mNumModels; base += mNumDepthTestTasks * kChunkSize)
 	{
-		start = taskId * numModelsPerTask1;
-		end   = start +  numModelsPerTask1;
-	}
-	else
-	{
-		start = (numRemainingModels * numModelsPerTask1) + ((taskId - numRemainingModels) * numModelsPerTask2);
-		end   = start +  numModelsPerTask2;
-	}
-
-	for(UINT i = start; i < end; i++)
-	{
-		mpVisible[i] = false;
-		mpTransformedAABBox[i].SetVisible(&mpVisible[i]);
-		
-		if(mpBBoxVisible[i] && !mpTransformedAABBox[i].IsTooSmall(mViewMatrix, mProjMatrix, mpCamera))
+		UINT end = min(base + kChunkSize, mNumModels);
+		for(UINT i = base; i < end; i++)
 		{
-			mpTransformedAABBox[i].TransformAABBox();
-			mpTransformedAABBox[i].RasterizeAndDepthTestAABBox(mpRenderTargetPixels);
+			mpVisible[i] = false;
+			mpTransformedAABBox[i].SetVisible(&mpVisible[i]);
+
+			if(mpBBoxVisible[i] && !mpTransformedAABBox[i].IsTooSmall(mViewMatrix, mProjMatrix, mpCamera))
+			{
+				mpTransformedAABBox[i].TransformAABBox();
+				mpTransformedAABBox[i].RasterizeAndDepthTestAABBox(mpRenderTargetPixels);
+			}
 		}
 	}
 }
