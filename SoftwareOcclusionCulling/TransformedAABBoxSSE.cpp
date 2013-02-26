@@ -159,16 +159,22 @@ bool TransformedAABBoxSSE::TransformAABBox(__m128 xformedPos[], const __m128 cum
 
 void TransformedAABBoxSSE::Gather(vFloat4 pOut[3], UINT triId, const __m128 xformedPos[])
 {
-	for(int lane = 0; lane < SSE; lane++)
+	for(int i = 0; i < 3; i++)
 	{
-		for(int i = 0; i < 3; i++)
-		{
-			UINT index = sBBIndexList[(triId * 3) + (lane * 3) + i];
-			pOut[i].X.lane[lane] = xformedPos[index].m128_f32[0];
-			pOut[i].Y.lane[lane] = xformedPos[index].m128_f32[1];
-			pOut[i].Z.lane[lane] = xformedPos[index].m128_f32[2];
-			pOut[i].W.lane[lane] = xformedPos[index].m128_f32[3];
-		}
+		UINT ind0 = sBBIndexList[triId*3 + i + 0];
+		UINT ind1 = sBBIndexList[triId*3 + i + 3];
+		UINT ind2 = sBBIndexList[triId*3 + i + 6];
+		UINT ind3 = sBBIndexList[triId*3 + i + 9];
+
+		__m128 v0 = xformedPos[ind0];	// x0 y0 z0 w0
+		__m128 v1 = xformedPos[ind1];	// x1 y1 z1 w1
+		__m128 v2 = xformedPos[ind2];	// x2 y2 z2 w2
+		__m128 v3 = xformedPos[ind3];	// x3 y3 z3 w3
+		_MM_TRANSPOSE4_PS(v0, v1, v2, v3);
+		pOut[i].X = VecF32(v0);
+		pOut[i].Y = VecF32(v1);
+		pOut[i].Z = VecF32(v2);
+		pOut[i].W = VecF32(v3);
 	}
 }
 
