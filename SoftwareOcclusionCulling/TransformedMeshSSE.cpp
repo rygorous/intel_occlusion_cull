@@ -53,10 +53,14 @@ void TransformedMeshSSE::TransformVertices(__m128 *cumulativeMatrix,
 	UINT i;
 	for(i = start; i <= end; i++)
 	{
-		mpXformedPos[i] = TransformCoords(&mpVertices[i].position, cumulativeMatrix);
-		float oneOverW = 1.0f/max(mpXformedPos[i].m128_f32[3], 0.0000001f);
-		mpXformedPos[i] = _mm_mul_ps(mpXformedPos[i], _mm_set1_ps(oneOverW));
-		mpXformedPos[i].m128_f32[3] = oneOverW;
+		__m128 xform = TransformCoords(&mpVertices[i].position, cumulativeMatrix);
+		__m128 vertZ = _mm_shuffle_ps(xform, xform, 0xaa);
+		__m128 vertW = _mm_shuffle_ps(xform, xform, 0xff);
+		__m128 projected = _mm_div_ps(xform, vertW);
+
+		// set to all-0 if near-clipped
+		__m128 mNoNearClip = _mm_cmple_ps(vertZ, vertW);
+		mpXformedPos[i] = _mm_and_ps(projected, mNoNearClip);
 	}
 }
 
@@ -147,7 +151,7 @@ void TransformedMeshSSE::BinTransformedTrianglesST(UINT taskId,
 			}
 
 			// Reject the triangle if any of its verts is behind the nearclip plane
-			if(oneOverW[0] > 1.0f || oneOverW[1] > 1.0f || oneOverW[2] > 1.0f) continue;
+			if(oneOverW[0] == 0.0f || oneOverW[1] == 0.0f || oneOverW[2] == 0.0f) continue;
 
 			// Convert bounding box in terms of pixels to bounding box in terms of tiles
 			int startX = max(vStartX.lane[i]/TILE_WIDTH_IN_PIXELS, 0);
@@ -230,7 +234,6 @@ void TransformedMeshSSE::BinTransformedTrianglesMT(UINT taskId,
         VecS32 vStartY = vmax(vmin(vmin(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), VecS32(0));
         VecS32 vEndY   = vmin(vmax(vmax(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), VecS32(SCREENH - 1));
 
-
 		for(int i = 0; i < numLanes; i++)
 		{
 			// Skip triangle if area is zero 
@@ -244,7 +247,7 @@ void TransformedMeshSSE::BinTransformedTrianglesMT(UINT taskId,
 			}
 			
 			// Reject the triangle if any of its verts is behind the nearclip plane
-			if(oneOverW[0] > 1.0f || oneOverW[1] > 1.0f || oneOverW[2] > 1.0f) continue;
+			if(oneOverW[0] == 0.0f || oneOverW[1] == 0.0f || oneOverW[2] == 0.0f) continue;
 
 			// Convert bounding box in terms of pixels to bounding box in terms of tiles
 			int startX = max(vStartX.lane[i]/TILE_WIDTH_IN_PIXELS, 0);
