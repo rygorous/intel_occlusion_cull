@@ -62,17 +62,22 @@ void TransformedMeshSSE::TransformVertices(__m128 *cumulativeMatrix,
 
 void TransformedMeshSSE::Gather(vFloat4 pOut[3], UINT triId, UINT numLanes)
 {
-	for(UINT l = 0; l < numLanes; l++)
+	const UINT *pInd0 = &mpIndices[triId * 3];
+	const UINT *pInd1 = pInd0 + (numLanes > 1 ? 3 : 0);
+	const UINT *pInd2 = pInd0 + (numLanes > 2 ? 6 : 0);
+	const UINT *pInd3 = pInd0 + (numLanes > 3 ? 9 : 0);
+
+	for(UINT i = 0; i < 3; i++)
 	{
-		for(UINT i = 0; i < 3; i++)
-		{
-			UINT index = mpIndices[(triId * 3) + (l * 3) + i];
-			pOut[i].X.lane[l] = mpXformedPos[index].m128_f32[0];
-			pOut[i].Y.lane[l] = mpXformedPos[index].m128_f32[1];
-			pOut[i].Z.lane[l] = mpXformedPos[index].m128_f32[2];
-			pOut[i].W.lane[l] = mpXformedPos[index].m128_f32[3];
-			
-		}
+		__m128 v0 = mpXformedPos[pInd0[i]];	// x0 y0 z0 w0
+		__m128 v1 = mpXformedPos[pInd1[i]];	// x1 y1 z1 w1
+		__m128 v2 = mpXformedPos[pInd2[i]];	// x2 y2 z2 w2
+		__m128 v3 = mpXformedPos[pInd3[i]];	// x3 y3 z3 w3
+		_MM_TRANSPOSE4_PS(v0, v1, v2, v3);
+		pOut[i].X = VecF32(v0);
+		pOut[i].Y = VecF32(v1);
+		pOut[i].Z = VecF32(v2);
+		pOut[i].W = VecF32(v3);
 	}
 }
 
