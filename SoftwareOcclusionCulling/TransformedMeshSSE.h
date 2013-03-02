@@ -52,7 +52,7 @@ class TransformedMeshSSE : public HelperSSE
 									   USHORT* pBinMesh,
 									   USHORT* pNumTrisInBin);
 
-		void GetOneTriangleData(float* xformedPos, UINT triId, UINT lane);
+		void GetOneTriangleData(__m128 xformedPos[3], UINT triId);
 
 		inline UINT GetNumTriangles() {return mNumTriangles;}
 		inline UINT GetNumVertices() {return mNumVertices;}

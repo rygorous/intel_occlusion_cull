@@ -148,7 +148,7 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
 	UINT offset2 = YOFFSET2_ST * tileY + XOFFSET2_ST * tileX;
 	UINT numTrisInBin = mpNumTrisInBin[offset1 + bin];
 
-	vFloat4 xformedPos[3];
+	__m128 gatherBuf[4][3];
 	bool done = false;
 	bool allBinsEmpty = true;
 	mNumRasterizedTris[tileId] = numTrisInBin;
@@ -177,7 +177,7 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
 			USHORT modelId = mpBinModel[offset2 + bin * MAX_TRIS_IN_BIN_ST + binIndex];
 			USHORT meshId = mpBinMesh[offset2 + bin * MAX_TRIS_IN_BIN_ST + binIndex];
 			UINT triIdx = mpBin[offset2 + bin * MAX_TRIS_IN_BIN_ST + binIndex];
-			mpTransformedModels1[modelId].Gather((float*)&xformedPos, meshId, triIdx, ii);
+			mpTransformedModels1[modelId].Gather(gatherBuf[ii], meshId, triIdx);
 			allBinsEmpty = false;
 			numSimdTris++; 
 
@@ -191,58 +191,61 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
 			return;
 		}
 
-		vFloat4* xformedvPos = (vFloat4*)&xformedPos;
-
-		// use fixed-point only for X and Y.  Avoid work for Z and W.
-        vFxPt4 xFormedFxPtPos[3];
+		// use fixed-point only for X and Y.
+		VecS32 fixX[3], fixY[3];
+		VecF32 Z[3];
 		for(int i = 0; i < 3; i++)
 		{
-			xFormedFxPtPos[i].X = ftoi_round(xformedvPos[i].X);
-			xFormedFxPtPos[i].Y = ftoi_round(xformedvPos[i].Y);
-			xFormedFxPtPos[i].Z = ftoi_round(xformedvPos[i].Z);
-			xFormedFxPtPos[i].W = ftoi_round(xformedvPos[i].W);
+			// read 4 verts
+			__m128 v0 = gatherBuf[0][i];
+			__m128 v1 = gatherBuf[1][i];
+			__m128 v2 = gatherBuf[2][i];
+			__m128 v3 = gatherBuf[3][i];
+
+			// transpose into SoA layout
+			_MM_TRANSPOSE4_PS(v0, v1, v2, v3);
+
+			fixX[i] = ftoi_round(VecF32(v0));
+			fixY[i] = ftoi_round(VecF32(v1));
+			Z[i] = VecF32(v2);
 		}
 
 		// Fab(x, y) =     Ax       +       By     +      C              = 0
 		// Fab(x, y) = (ya - yb)x   +   (xb - xa)y + (xa * yb - xb * ya) = 0
 		// Compute A = (ya - yb) for the 3 line segments that make up each triangle
-		VecS32 A0 = xFormedFxPtPos[1].Y - xFormedFxPtPos[2].Y;
-		VecS32 A1 = xFormedFxPtPos[2].Y - xFormedFxPtPos[0].Y;
-		VecS32 A2 = xFormedFxPtPos[0].Y - xFormedFxPtPos[1].Y;
+		VecS32 A0 = fixY[1] - fixY[2];
+		VecS32 A1 = fixY[2] - fixY[0];
+		VecS32 A2 = fixY[0] - fixY[1];
 
 		// Compute B = (xb - xa) for the 3 line segments that make up each triangle
-		VecS32 B0 = xFormedFxPtPos[2].X - xFormedFxPtPos[1].X;
-		VecS32 B1 = xFormedFxPtPos[0].X - xFormedFxPtPos[2].X;
-		VecS32 B2 = xFormedFxPtPos[1].X - xFormedFxPtPos[0].X;
+		VecS32 B0 = fixX[2] - fixX[1];
+		VecS32 B1 = fixX[0] - fixX[2];
+		VecS32 B2 = fixX[1] - fixX[0];
 
 		// Compute C = (xa * yb - xb * ya) for the 3 line segments that make up each triangle
-		VecS32 C0 = xFormedFxPtPos[1].X * xFormedFxPtPos[2].Y - xFormedFxPtPos[2].X * xFormedFxPtPos[1].Y;
-		VecS32 C1 = xFormedFxPtPos[2].X * xFormedFxPtPos[0].Y - xFormedFxPtPos[0].X * xFormedFxPtPos[2].Y;
-		VecS32 C2 = xFormedFxPtPos[0].X * xFormedFxPtPos[1].Y - xFormedFxPtPos[1].X * xFormedFxPtPos[0].Y;
+		VecS32 C0 = fixX[1] * fixY[2] - fixX[2] * fixY[1];
+		VecS32 C1 = fixX[2] * fixY[0] - fixX[0] * fixY[2];
+		VecS32 C2 = fixX[0] * fixY[1] - fixX[1] * fixY[0];
 
 		// Compute triangle area
-		VecS32 triArea = A0 * xFormedFxPtPos[0].X;
-		triArea += B0 * xFormedFxPtPos[0].Y;
-		triArea += C0;
-
+		VecS32 triArea = B2 * A1 - B1 * A2;
 		VecF32 oneOverTriArea = VecF32(1.0f) / itof(triArea);
 
 		// Use bounding box traversal strategy to determine which pixels to rasterize 
-		VecS32 startX = vmax(vmin(vmin(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), VecS32(tileStartX)) & VecS32(~1);
-		VecS32 endX   = vmin(vmax(vmax(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X) + VecS32(1), VecS32(tileEndX));
+		VecS32 startX = vmax(vmin(vmin(fixX[0], fixX[1]), fixX[2]), VecS32(tileStartX)) & VecS32(~1);
+		VecS32 endX   = vmin(vmax(vmax(fixX[0], fixX[1]), fixX[2]) + VecS32(1), VecS32(tileEndX));
 
-		VecS32 startY = vmax(vmin(vmin(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), VecS32(tileStartY)) & VecS32(~1);
-		VecS32 endY   = vmin(vmax(vmax(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y) + VecS32(1), VecS32(tileEndY));
+		VecS32 startY = vmax(vmin(vmin(fixY[0], fixY[1]), fixY[2]), VecS32(tileStartY)) & VecS32(~1);
+		VecS32 endY   = vmin(vmax(vmax(fixY[0], fixY[1]), fixY[2]) + VecS32(1), VecS32(tileEndY));
 
 		// Now we have 4 triangles set up.  Rasterize them each individually.
         for(int lane=0; lane < numSimdTris; lane++)
         {
 			// Extract this triangle's properties from the SIMD versions
-            VecF32 zz[3], oneOverW[3];
+            VecF32 zz[3];
 			for(int vv = 0; vv < 3; vv++)
 			{
-				zz[vv] = VecF32(xformedvPos[vv].Z.lane[lane]);
-				oneOverW[vv] = VecF32(xformedvPos[vv].W.lane[lane]);
+				zz[vv] = VecF32(Z[vv].lane[lane]);
 			}
 
 			VecF32 oneOverTotalArea(oneOverTriArea.lane[lane]);

@@ -196,10 +196,9 @@ void TransformedModelSSE::BinTransformedTrianglesMT(UINT taskId,
 	}
 }
 
-void TransformedModelSSE::Gather(float* xformedPos,
-								 UINT meshId, 
-								 UINT triId, 
-								 UINT lane)
+void TransformedModelSSE::Gather(__m128 xformedPos[3],
+								 UINT meshId,
+								 UINT triId)
 {
-	mpMeshes[meshId].GetOneTriangleData(xformedPos, triId, lane); 
+	mpMeshes[meshId].GetOneTriangleData(xformedPos, triId); 
 }

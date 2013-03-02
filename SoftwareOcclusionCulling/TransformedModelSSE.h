@@ -51,10 +51,9 @@ class TransformedModelSSE : public HelperSSE
 									   USHORT* pBinMesh,
 									   USHORT* pNumTrisInBin);
 
-		void Gather(float* xformedPos,
-			        UINT meshId, 
-					UINT triId, 
-					UINT lane);
+		void Gather(__m128 xformedPos[3],
+			        UINT meshId,
+					UINT triId);
 
 		inline UINT GetNumVertices()
 		{

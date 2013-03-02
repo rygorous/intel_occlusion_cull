@@ -299,7 +299,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT rawT
 	UINT offset2 = YOFFSET2_MT * tileY + XOFFSET2_MT * tileX;
 	UINT numTrisInBin = mpNumTrisInBin[offset1 + bin];
 
-	vFloat4 xformedPos[3];
+	__m128 gatherBuf[4][3];
 	bool done = false;
 	bool allBinsEmpty = true;
 	mNumRasterizedTris[taskId] = numTrisInBin;
@@ -328,7 +328,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT rawT
 			USHORT modelId = mpBinModel[offset2 + bin * MAX_TRIS_IN_BIN_MT + binIndex];
 			USHORT meshId = mpBinMesh[offset2 + bin * MAX_TRIS_IN_BIN_MT + binIndex];
 			UINT triIdx = mpBin[offset2 + bin * MAX_TRIS_IN_BIN_MT + binIndex];
-			mpTransformedModels1[modelId].Gather((float*)&xformedPos, meshId, triIdx, ii);
+			mpTransformedModels1[modelId].Gather(gatherBuf[ii], meshId, triIdx);
 			allBinsEmpty = false;
 			numSimdTris++; 
 
@@ -344,10 +344,21 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT rawT
 
 		// use fixed-point only for X and Y.
 		VecS32 fixX[3], fixY[3];
+		VecF32 Z[3];
 		for(int i = 0; i < 3; i++)
 		{
-			fixX[i] = ftoi_round(xformedPos[i].X);
-			fixY[i] = ftoi_round(xformedPos[i].Y);
+			// read 4 verts
+			__m128 v0 = gatherBuf[0][i];
+			__m128 v1 = gatherBuf[1][i];
+			__m128 v2 = gatherBuf[2][i];
+			__m128 v3 = gatherBuf[3][i];
+
+			// transpose into SoA layout
+			_MM_TRANSPOSE4_PS(v0, v1, v2, v3);
+
+			fixX[i] = ftoi_round(VecF32(v0));
+			fixY[i] = ftoi_round(VecF32(v1));
+			Z[i] = VecF32(v2);
 		}
 
 		// Fab(x, y) =     Ax       +       By     +      C              = 0
@@ -372,10 +383,8 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT rawT
 		VecF32 oneOverTriArea = VecF32(1.0f) / itof(triArea);
 
 		// Z setup
-		VecF32 Z[3];
-		Z[0] = xformedPos[0].Z;
-		Z[1] = (xformedPos[1].Z - Z[0]) * oneOverTriArea;
-		Z[2] = (xformedPos[2].Z - Z[0]) * oneOverTriArea;
+		Z[1] = (Z[1] - Z[0]) * oneOverTriArea;
+		Z[2] = (Z[2] - Z[0]) * oneOverTriArea;
 
 		// Use bounding box traversal strategy to determine which pixels to rasterize 
 		VecS32 startX = vmax(vmin(vmin(fixX[0], fixX[1]), fixX[2]), VecS32(tileStartX)) & VecS32(~1);

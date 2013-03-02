@@ -274,15 +274,9 @@ void TransformedMeshSSE::BinTransformedTrianglesMT(UINT taskId,
 }
 
 
-void TransformedMeshSSE::GetOneTriangleData(float* xformedPos, UINT triId, UINT lane)
+void TransformedMeshSSE::GetOneTriangleData(__m128 xformedPos[3], UINT triId)
 {
-	vFloat4* pOut = (vFloat4*) xformedPos;
+	const UINT *inds = &mpIndices[triId * 3];
 	for(int i = 0; i < 3; i++)
-	{
-		UINT index = mpIndices[(triId * 3) + i];
-		(pOut + i)->X.lane[lane] = mpXformedPos[index].m128_f32[0];
-		(pOut + i)->Y.lane[lane] = mpXformedPos[index].m128_f32[1];
-		(pOut + i)->Z.lane[lane] = mpXformedPos[index].m128_f32[2];
-		(pOut + i)->W.lane[lane] = mpXformedPos[index].m128_f32[3];
-	}
+		xformedPos[i] = mpXformedPos[inds[i]];
 }
