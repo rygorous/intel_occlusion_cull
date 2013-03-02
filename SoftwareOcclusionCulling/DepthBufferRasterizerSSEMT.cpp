@@ -185,7 +185,7 @@ void DepthBufferRasterizerSSEMT::BinTransformedMeshes(UINT taskId, UINT taskCoun
 		UINT offset = YOFFSET1_MT * yy;
         for(UINT xx = 0; xx < SCREENW_IN_TILES; xx++)
         {
-			UINT index = offset + (XOFFSET1_MT * xx) + taskId;
+			UINT index = offset + (XOFFSET1_MT * xx) + (TOFFSET1_MT * taskId);
             mpNumTrisInBin[index] = 0;
 	    }
     }
@@ -297,7 +297,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT rawT
 	UINT binIndex = 0;
 	UINT offset1 = YOFFSET1_MT * tileY + XOFFSET1_MT * tileX;
 	UINT offset2 = YOFFSET2_MT * tileY + XOFFSET2_MT * tileX;
-	UINT numTrisInBin = mpNumTrisInBin[offset1 + bin];
+	UINT numTrisInBin = mpNumTrisInBin[offset1 + TOFFSET1_MT * bin];
 
 	__m128 gatherBuf[4][3];
 	bool done = false;
@@ -317,7 +317,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT rawT
 				{
 					break;
 				}
-				numTrisInBin = mpNumTrisInBin[offset1 + bin];
+				numTrisInBin = mpNumTrisInBin[offset1 + TOFFSET1_MT * bin];
 				mNumRasterizedTris[taskId] += numTrisInBin;
 				binIndex = 0;
 			}

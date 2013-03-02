@@ -264,7 +264,7 @@ void TransformedMeshSSE::BinTransformedTrianglesMT(UINT taskId,
 				int offset2 = YOFFSET2_MT * row;
 				for(col = startX; col <= endX; col++)
 				{
-					int idx1 = offset1 + (XOFFSET1_MT * col) + taskId;
+					int idx1 = offset1 + (XOFFSET1_MT * col) + (TOFFSET1_MT * taskId);
 					int idx2 = offset2 + (XOFFSET2_MT * col) + (taskId * MAX_TRIS_IN_BIN_MT) + pNumTrisInBin[idx1];
 					pBin[idx2] = index + i;
 					pBinModel[idx2] = modelId;
