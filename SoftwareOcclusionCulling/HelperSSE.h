@@ -16,6 +16,8 @@
 //--------------------------------------------------------------------------------------
 
 #include "immintrin.h"
+#include <intrin.h>
+
 #ifndef HELPERSSE_H
 #define HELPERSSE_H
 
@@ -120,6 +122,16 @@ inline VecF32 bits2float(const VecS32 &x)						{ return VecF32(_mm_castsi128_ps(
 inline VecF32 select(const VecF32 &a, const VecF32 &b, const VecF32 &mask)	{ return VecF32(_mm_blendv_ps(a.simd, b.simd, mask.simd)); }
 // Select between a and b based on sign (MSB) of mask
 inline VecF32 select(const VecF32 &a, const VecF32 &b, const VecS32 &mask)	{ return VecF32(_mm_blendv_ps(a.simd, b.simd, _mm_castsi128_ps(mask.simd))); }
+
+// Find index of least-significant set bit in mask and clear it (mask must be nonzero)
+static int FindClearLSB(unsigned int *mask)
+{
+	unsigned long idx;
+	_BitScanForward(&idx, *mask);
+	*mask &= *mask - 1;
+	return idx;
+}
+
 
 class HelperSSE
 {
