@@ -91,7 +91,7 @@ public:
 	}
 };
 
-static RunStatistics g_totalCullTime, g_renderTime, g_testTime;
+static RunStatistics g_totalCullTime, g_renderTime, g_testTime, g_renderSceneTime;
 
 #endif
 
@@ -864,6 +864,9 @@ void MySample::Render(double deltaSeconds)
 
 	mTotalCullTime = mTotalCullTimer.StopTimer();
 
+	CPUTTimerWin renderSceneTimer;
+	renderSceneTimer.StartTimer();
+
 	// If mViewDepthBuffer is enabled then blit the CPU rasterized depth buffer to the frame buffer
 	if(mViewDepthBuffer)
 	{
@@ -895,6 +898,8 @@ void MySample::Render(double deltaSeconds)
 		}
 		mNumDrawCalls = CPUTMeshDX11::GetDrawCallCount();
 	}
+
+	double renderSceneTime = renderSceneTimer.StopTimer();
 
 	wchar_t string[CPUT_MAX_STRING_LENGTH];
 	if(mEnableCulling)
@@ -959,6 +964,7 @@ void MySample::Render(double deltaSeconds)
 		g_totalCullTime.record((float) (mTotalCullTime * 1000.0f));
 		g_renderTime.record((float) (mRasterizeTime * 1000.0f));
 		g_testTime.record((float) (mDepthTestTime * 1000.0f));
+		g_renderSceneTime.record((float) (renderSceneTime * 1000.0f));
 
 		if (frame >= initialDelay + sampleLen)
 		{
@@ -972,6 +978,8 @@ void MySample::Render(double deltaSeconds)
 			g_renderTime.summarize();
 			dprintf("Test time:\n");
 			g_testTime.summarize();
+			dprintf("Render scene time:\n");
+			g_renderSceneTime.summarize();
 
 			exit(1);
 		}
