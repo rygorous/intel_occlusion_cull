@@ -274,16 +274,24 @@ CPUTResult CPUTModelDX11::LoadModel(CPUTConfigBlock *pBlock, int *pParentID, CPU
         ASSERT( CPUTSUCCESS(result), _L("Failed loading model") );
     }
     // Create the model constant buffer.
-    HRESULT hr;
-    D3D11_BUFFER_DESC bd = {0};
-    bd.ByteWidth = sizeof(CPUTModelConstantBuffer);
-    bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-    bd.Usage = D3D11_USAGE_DYNAMIC;
-    bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-    hr = (CPUT_DX11::GetDevice())->CreateBuffer( &bd, NULL, &mpModelConstantBuffer );
-    ASSERT( !FAILED( hr ), _L("Error creating constant buffer.") );
-    CPUTSetDebugName( mpModelConstantBuffer, _L("Model Constant buffer") );
-    cString name = _L("#cbPerModelValues");
+	static ID3D11Buffer *pMasterD3DBuffer = NULL;
+	if( !pMasterD3DBuffer )
+	{
+		HRESULT hr;
+		D3D11_BUFFER_DESC bd = {0};
+		bd.ByteWidth = sizeof(CPUTModelConstantBuffer);
+		bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+		bd.Usage = D3D11_USAGE_DYNAMIC;
+		bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		hr = (CPUT_DX11::GetDevice())->CreateBuffer( &bd, NULL, &pMasterD3DBuffer );
+		ASSERT( !FAILED( hr ), _L("Error creating constant buffer.") );
+		CPUTSetDebugName( pMasterD3DBuffer, _L("Model Constant buffer") );
+	}
+	else
+		pMasterD3DBuffer->AddRef();
+
+	mpModelConstantBuffer = pMasterD3DBuffer;
+	cString name = _L("#cbPerModelValues");
     mpCPUTConstantBuffer = new CPUTBufferDX11(name, mpModelConstantBuffer);
     pAssetLibrary->AddConstantBuffer( name, mpCPUTConstantBuffer, this ); // Note: don't include mesh index as this is not mesh dependent
 //    pBuffer->Release(); // We're done with it.  We added it to the library.  Release our reference.
