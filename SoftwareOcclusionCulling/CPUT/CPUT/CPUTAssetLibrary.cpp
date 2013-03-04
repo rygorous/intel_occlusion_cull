@@ -306,6 +306,7 @@ CPUTMaterial *CPUTAssetLibrary::GetMaterial(const cString &name, bool nameIsFull
     // Resolve name to absolute path before searching
     CPUTOSServices *pServices = CPUTOSServices::GetOSServices();
     cString absolutePathAndFilename;
+	bool created = false;
     pServices->ResolveAbsolutePathAndFilename( nameIsFullPathAndFilename? name : (mMaterialDirectoryName + name + _L(".mtl")), &absolutePathAndFilename);
 
     CPUTMaterial *pMaterial;
@@ -318,17 +319,16 @@ CPUTMaterial *CPUTAssetLibrary::GetMaterial(const cString &name, bool nameIsFull
             return pMaterial;
         }
     }
-    else
-    {
-        // Loading a non-instanced material (or, the master)
-        pMaterial = FindMaterial(absolutePathAndFilename, true);
-    }
+
+    // Loading a non-instanced material (or, the master)
+    pMaterial = FindMaterial(absolutePathAndFilename, true);
 
     // If the material has per-model properties, then we need a material clone
     if( !pMaterial )
     {
-        pMaterial = CPUTMaterial::CreateMaterial( absolutePathAndFilename, pModel, meshIndex );
+        pMaterial = CPUTMaterial::CreateMaterial( absolutePathAndFilename );
         ASSERT( pMaterial, _L("Failed creating material.") );
+		created = true;
     }
     if( !pModel )
     {
@@ -336,7 +336,8 @@ CPUTMaterial *CPUTAssetLibrary::GetMaterial(const cString &name, bool nameIsFull
         return pMaterial;
     }
     CPUTMaterial *pClone = pMaterial->CloneMaterial( absolutePathAndFilename, pModel, meshIndex);
-    pMaterial->Release(); // We don't want to hold a reference to the master.
+	if ( created )
+		pMaterial->Release(); // We don't want to hold a reference to the master.
     return pClone;
 }
 
