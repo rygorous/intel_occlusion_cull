@@ -339,10 +339,16 @@ CPUTMaterial *CPUTAssetLibrary::GetMaterial(const cString &name, bool nameIsFull
         // Not looking for an instance, so return what we found
         return pMaterial;
     }
+#if 1
+	if ( !created )
+		pMaterial->AddRef();
+	return pMaterial;
+#else
     CPUTMaterial *pClone = pMaterial->CloneMaterial( absolutePathAndFilename, pModel, meshIndex);
 	if ( created )
 		pMaterial->Release(); // We don't want to hold a reference to the master.
     return pClone;
+#endif
 }
 
 
