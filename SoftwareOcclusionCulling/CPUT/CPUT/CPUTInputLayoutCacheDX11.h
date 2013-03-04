@@ -35,16 +35,39 @@ public:
 	void ClearLayoutCache();
 
 private:
+	struct LayoutKey
+	{
+		const D3D11_INPUT_ELEMENT_DESC *layout;
+		void *vs;
+		int nElems;
+		bool layout_owned;
+
+		LayoutKey();
+		LayoutKey(const D3D11_INPUT_ELEMENT_DESC *pDXLayout, void *vs, bool just_ref);
+		LayoutKey(const LayoutKey &x);
+		~LayoutKey();
+
+		LayoutKey& operator =(const LayoutKey &x);
+
+		inline bool operator <(const LayoutKey &x) const
+		{
+			if (vs != x.vs)
+				return vs < x.vs;
+
+			if (nElems != x.nElems)
+				return nElems < x.nElems;
+
+			return memcmp(layout, x.layout, sizeof(*layout) * nElems) < 0;
+		}
+	};
+
     // singleton
     CPUTInputLayoutCacheDX11() { mLayoutList.clear(); }
-
-    // convert the D3D11_INPUT_ELEMENT_DESC to string key
-    cString GenerateLayoutKey(D3D11_INPUT_ELEMENT_DESC *pDXLayout);
 
     CPUTResult VerifyLayoutCompatibility(D3D11_INPUT_ELEMENT_DESC *pDXLayout, ID3DBlob *pVertexShaderBlob);
 
     static CPUTInputLayoutCacheDX11 *mpInputLayoutCache;
-    std::map<cString, ID3D11InputLayout*> mLayoutList;
+    std::map<LayoutKey, ID3D11InputLayout*> mLayoutList;
 };
 
 #endif //#define __CPUTINPUTLAYOUTCACHERDX11_H__
