@@ -173,8 +173,10 @@ void *CPUTAssetLibrary::FindAsset(const cString &name, CPUTAssetListEntry *pList
 {
     cString absolutePathAndFilename;
     CPUTOSServices *pServices = CPUTOSServices::GetOSServices();
-    pServices->ResolveAbsolutePathAndFilename( nameIsFullPathAndFilename ? name : (mAssetSetDirectoryName + name), &absolutePathAndFilename);
-    absolutePathAndFilename = nameIsFullPathAndFilename ? name : absolutePathAndFilename;
+	if ( !nameIsFullPathAndFilename )
+		pServices->ResolveAbsolutePathAndFilename( mAssetSetDirectoryName + name, &absolutePathAndFilename );
+	else
+		absolutePathAndFilename = name;
 	UINT hash = CPUTComputeHash( absolutePathAndFilename );
 
     while(NULL!=pList)
