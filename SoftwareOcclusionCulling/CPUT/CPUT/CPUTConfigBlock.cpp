@@ -181,13 +181,18 @@ CPUTConfigEntry *CPUTConfigBlock::AddValue(const cString &szName, const cString 
 //----------------------------------------------------------------
 CPUTConfigEntry *CPUTConfigBlock::GetValueByName(const cString &szName)
 {
-    cString szString = szName;
-    std::transform(szString.begin(), szString.end(), szString.begin(), ::tolower);
-
     for(int ii=0; ii<mnValueCount; ++ii)
     {
-        if(mpValues[ii].szName.compare(szString) == 0)
-        {
+		const cString &valName = mpValues[ii].szName;
+		if(valName.size() != szName.size())
+			continue;
+
+		size_t j = 0;
+		while (j < valName.size() && tolower(szName[j]) == valName[j])
+			++j;
+
+		if (j == valName.size()) // match
+		{
             return &mpValues[ii];
         }
     }
