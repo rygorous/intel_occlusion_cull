@@ -19,65 +19,87 @@
 CPUTConfigEntry  &CPUTConfigEntry::sNullConfigValue = CPUTConfigEntry(_L(""), _L(""));
 
 //----------------------------------------------------------------
-void RemoveWhitespace(cString &szString)
+static bool iswhite(char ch)
 {
-    // Remove leading whitespace
-    size_t nFirstIndex = szString.find_first_not_of(_L(' '));
-    if(nFirstIndex != cString::npos)
-    {
-        szString = szString.substr(nFirstIndex);
-    }
+	return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
+}
 
-    // Remove trailing newlines
-    size_t nLastIndex = szString.find_last_not_of(_L('\n'));
-    while(nLastIndex != szString.length()-1)
-    {
-        szString.erase(nLastIndex+1,1);
-        nLastIndex = szString.find_last_not_of(_L('\n'));
-    };
-    // Tabs
-    nLastIndex = szString.find_last_not_of(_L('\t'));
-    while(nLastIndex != szString.length()-1)
-    {
-        szString.erase(nLastIndex+1,1);
-        nLastIndex = szString.find_last_not_of(_L('\t'));
-    };
-    // Spaces
-    nLastIndex = szString.find_last_not_of(_L(' '));
-    while(nLastIndex != szString.length()-1)
-    {
-        szString.erase(nLastIndex+1,1);
-        nLastIndex = szString.find_last_not_of(_L(' '));
-    };
+template<typename T>
+static void RemoveWhitespace(T &start, T &end)
+{
+	while (start < end && iswhite(*start))
+		++start;
+
+	while (end > start && iswhite(*(end - 1)))
+		--end;
 }
 
 //----------------------------------------------------------------
-CPUTResult ReadLine(cString &szString, FILE *pFile)
+static bool ReadLine(const char **ppStart, const char **ppEnd, const char **ppCur)
 {
-    // TODO: 128 chars is a narrow line.  Why the limit?
-    // Is this not really reading a line, but instead just reading the next 128 chars to parse?
-    TCHAR   szCurrLine[128] = {0};
-    TCHAR *ret = fgetws(szCurrLine, 128, pFile);
-    if(ret != szCurrLine)
-    {
-        if(!feof(pFile))
-        {
-            return CPUT_ERROR_FILE_ERROR;
-        }
-    }
+	const char *pCur = *ppCur;
+	if (!*pCur) // check for EOF
+		return false;
 
-    szString = szCurrLine;
-    RemoveWhitespace(szString);
+	// We're at the start of a line now, skip leading whitespace
+	while (*pCur == ' ' || *pCur == '\t')
+		++pCur;
 
-    // TODO: why are we checking feof twice in this loop?
-    // And, why are we using an error code to signify done?
-    // eof check should be performed outside ReadLine()
-    if(feof(pFile))
-    {
-        return CPUT_ERROR_FILE_ERROR;
-    }
+	*ppStart = pCur;
 
-    return CPUT_SUCCESS;
+	// Forward to the end of the line and keep track of last non-whitespace char
+	const char *pEnd = pCur;
+	for (;;)
+	{
+		char ch = *pCur++;
+		if (!ch)
+		{
+			--pCur; // terminating NUL isn't consumed
+			break;
+		}
+		else if (ch == '\n')
+			break;
+		else if (!iswhite(ch))
+			pEnd = pCur;
+	}
+
+	*ppEnd = pEnd;
+	*ppCur = pCur;
+	return true;
+}
+
+//----------------------------------------------------------------
+static const char *FindFirst(const char *start, const char *end, char ch)
+{
+	const char *p = start;
+	while (p < end && *p != ch)
+		++p;
+	return p;
+}
+
+static const char *FindLast(const char *start, const char *end, char ch)
+{
+	const char *p = end;
+	while (--p >= start && *p != ch);
+	return p;
+}
+
+static void AssignStr(cString &dest, const char *start, const char *end, _locale_t locale)
+{
+	dest.clear();
+	dest.reserve(end - start); // assume most characters are 1-byte
+
+	const char *p = start;
+	while (p < end)
+	{
+		wchar_t wc;
+		int len = _mbtowc_l(&wc, p, end - p, locale);
+		if (len < 1)
+			break;
+
+		dest.push_back(wc);
+		p += len;
+	}
 }
 
 //----------------------------------------------------------------
@@ -196,22 +218,35 @@ CPUTResult CPUTConfigFile::LoadFile(const cString &szFilename)
         return result;
     }
 
-    /* count the number of blocks */
-    while(1)
-    {
-        /* Find the block */
-        // Read lines until a '[' is found
-        CPUTResult readResult = ReadLine(szCurrLine, pFile);
-        if(readResult != CPUT_SUCCESS)
-            break;
+	_locale_t locale = _get_current_locale();
 
-        size_t nOpenBracketIndex    = szCurrLine.find_first_of(_L('['));
-        size_t nCloseBracketIndex   = szCurrLine.find_last_of(_L(']'));
-        if(nOpenBracketIndex != cString::npos && nCloseBracketIndex != cString::npos)
-        {   // This line is a valid block header
-            mnBlockCount++;
-        }
-    };
+	/* Determine file size */
+	fseek(pFile, 0, SEEK_END);
+	int nBytes = ftell(pFile); // for text files, this is an overestimate
+	fseek(pFile, 0, SEEK_SET);
+
+	/* Read the whole thing */
+	char *pFileContents = new char[nBytes + 1];
+	nBytes = fread(pFileContents, 1, nBytes, pFile);
+	fclose(pFile);
+
+	pFileContents[nBytes] = 0; // add 0-terminator
+
+	/* Count the number of blocks */
+	const char *pCur = pFileContents;
+	const char *pStart, *pEnd;
+
+	while(ReadLine(&pStart, &pEnd, &pCur))
+	{
+		const char *pOpen = FindFirst(pStart, pEnd, '[');
+		const char *pClose = FindLast(pOpen + 1, pEnd, ']');
+		if (pOpen < pClose)
+		{
+			// This line is a valid block header
+			mnBlockCount++;
+		}
+	}
+
     /* Mtl files don't have headers, so we have
     to do some magic to support them */
     if(mnBlockCount == 0)
@@ -219,55 +254,39 @@ CPUTResult CPUTConfigFile::LoadFile(const cString &szFilename)
         mnBlockCount   = 1;
     }
 
-    fseek(pFile, 0, SEEK_SET);
+	pCur = pFileContents;
     mpBlocks = new CPUTConfigBlock[mnBlockCount];
     pCurrBlock = mpBlocks;
 
-    /* Find the first block first */
-    while(1)
-    {
-        /* Find the block */
-        // Read lines until a '[' is found
-        CPUTResult readResult = ReadLine(szCurrLine, pFile);
-        if(readResult != CPUT_SUCCESS && szCurrLine == _L(""))
-        {
-            fclose(pFile);
-            return CPUT_SUCCESS;
-        }
-
-        size_t nOpenBracketIndex    = szCurrLine.find_first_of(_L('['));
-        size_t nCloseBracketIndex   = szCurrLine.find_last_of(_L(']'));
-        if(nOpenBracketIndex != cString::npos && nCloseBracketIndex != cString::npos)
-        {   // This line is a valid block header
+	/* Find the first block first */
+	while(ReadLine(&pStart, &pEnd, &pCur))
+	{
+		const char *pOpen = FindFirst(pStart, pEnd, '[');
+		const char *pClose = FindLast(pOpen + 1, pEnd, ']');
+		if (pOpen < pClose)
+		{
+			// This line is a valid block header
             pCurrBlock = mpBlocks + nCurrBlock++;
-            szCurrLine.erase(nCloseBracketIndex,1);
-            pCurrBlock->mszName = szCurrLine.c_str()+1;
-            /*
-            size_t nSpaceIndex = szCurrLine.find_first_of(_L(' '));
-            cString szValue = szCurrLine.substr(nSpaceIndex+1); 
-            cString szName = szCurrLine.erase(nSpaceIndex, 1024); 
-            RemoveWhitespace(szValue);
-            RemoveWhitespace(szName);
-            pCurrBlock->mName.szName = szName;
-            pCurrBlock->mName.szValue = szValue;
-            */
+			AssignStr(pCurrBlock->mszName, pOpen + 1, pClose, locale);
             std::transform(pCurrBlock->mszName.begin(), pCurrBlock->mszName.end(), pCurrBlock->mszName.begin(), ::tolower);
-        }
-        else if(szCurrLine != _L(""))
-        {   // It's a value
-            if(pCurrBlock == NULL)
-            {
-                continue;
-            }
+		}
+		else if (pStart < pEnd)
+		{
+			// It's a value
+			if (pCurrBlock == NULL)
+				continue;
 
-            size_t  nEqualsIndex = szCurrLine.find_first_of(_L('='));
-            if(nEqualsIndex == cString::npos)
-            {
+			const char *pEquals = FindFirst(pStart, pEnd, '=');
+			if (pEquals == pEnd)
+			{
+				cString name;
+				AssignStr(name, pStart, pEnd, locale);
+
                 bool dup = false;
                 // No value, just a key, save it anyway
                 for(int ii=0;ii<pCurrBlock->mnValueCount;++ii)
                 {
-                    if(!pCurrBlock->mpValues[ii].szName.compare(szCurrLine))
+                    if(!pCurrBlock->mpValues[ii].szName.compare(name))
                     {
                         dup = true;
                         break;
@@ -275,22 +294,28 @@ CPUTResult CPUTConfigFile::LoadFile(const cString &szFilename)
                 }
                 if(!dup)
                 {
-                    pCurrBlock->mpValues[pCurrBlock->mnValueCount].szName = szCurrLine;
+					pCurrBlock->mpValues[pCurrBlock->mnValueCount].szName = name;
                     pCurrBlock->mnValueCount++;
                 }
-            }
-            else
-            {
-                cString szValue = szCurrLine.substr(nEqualsIndex+1);
-                cString szName = szCurrLine.erase(nEqualsIndex, 1024);
-                RemoveWhitespace(szValue);
-                RemoveWhitespace(szName);
-                std::transform(szName.begin(), szName.end(), szName.begin(), ::tolower);
+			}
+			else
+			{
+				const char *pNameStart = pStart;
+				const char *pNameEnd = pEquals;
+				const char *pValStart = pEquals + 1;
+				const char *pValEnd = pEnd;
+
+				RemoveWhitespace(pNameStart, pNameEnd);
+				RemoveWhitespace(pValStart, pValEnd);
+
+				cString name;
+				AssignStr(name, pNameStart, pNameEnd, locale);
+				std::transform(name.begin(), name.end(), name.begin(), ::tolower);
 
                 bool dup = false;
                 for(int ii=0;ii<pCurrBlock->mnValueCount;++ii)
                 {
-                    if(!pCurrBlock->mpValues[ii].szName.compare(szName))
+                    if(!pCurrBlock->mpValues[ii].szName.compare(name))
                     {
                         dup = true;
                         break;
@@ -298,15 +323,15 @@ CPUTResult CPUTConfigFile::LoadFile(const cString &szFilename)
                 }
                 if(!dup)
                 {
-                    pCurrBlock->mpValues[pCurrBlock->mnValueCount].szValue = szValue;
-                    pCurrBlock->mpValues[pCurrBlock->mnValueCount].szName = szName;
+                    AssignStr(pCurrBlock->mpValues[pCurrBlock->mnValueCount].szValue, pValStart, pValEnd, locale);
+                    pCurrBlock->mpValues[pCurrBlock->mnValueCount].szName = name;
                     pCurrBlock->mnValueCount++;
                 }
-            }
-        }
-    };
+			}
+		}
+	}
 
-    fclose(pFile);
+	delete[] pFileContents;
     return CPUT_SUCCESS;
 }
 
