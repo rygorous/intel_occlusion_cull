@@ -130,7 +130,7 @@ void CPUTConfigEntry::ValueAsFloatArray(float *pFloats, int count)
     {
 		if(szCurrValue == NULL)
             return;
-        swscanf_s(szCurrValue, _L("%f"), pFloats+ii);
+		pFloats[ii] = (float) _wtof(szCurrValue);
         szCurrValue = wcstok_s(NULL, _L(" "), &szNewValue);
 
     }
