@@ -99,7 +99,10 @@ static RunStatistics g_totalCullTime, g_renderTime, g_testTime, g_renderSceneTim
 //-----------------------------------------------------------------------------
 void MySample::Create()
 {    
+	CPUTTimerWin loadTimer;
     CPUTAssetLibrary *pAssetLibrary = CPUTAssetLibrary::GetAssetLibrary();
+
+	loadTimer.StartTimer();
 
     gLightDir.normalize();
 
@@ -449,6 +452,9 @@ void MySample::Create()
     mpCameraController->SetCamera(mpCamera);
     mpCameraController->SetLookSpeed(0.004f);
     mpCameraController->SetMoveSpeed(2.5f);
+
+	double loadTime = loadTimer.StopTimer();
+	dprintf("Load time: %.2fs\n", loadTime);
 }
 
 //-----------------------------------------------------------------------------
