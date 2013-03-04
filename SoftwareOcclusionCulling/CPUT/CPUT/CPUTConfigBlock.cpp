@@ -87,18 +87,30 @@ static const char *FindLast(const char *start, const char *end, char ch)
 static void AssignStr(cString &dest, const char *start, const char *end, _locale_t locale)
 {
 	dest.clear();
-	dest.reserve(end - start); // assume most characters are 1-byte
+	if (end <= start)
+		return;
+
+	static const int NBUF = 64;
+	wchar_t buf[NBUF];
+	int nb = 0;
+
+	size_t len = end - start;
+	size_t initial = len + 1; // assume most characters are 1-byte
+	dest.reserve(initial);
 
 	const char *p = start;
 	while (p < end)
 	{
-		wchar_t wc;
-		int len = _mbtowc_l(&wc, p, end - p, locale);
+		int len = _mbtowc_l(&buf[nb++], p, end - p, locale);
 		if (len < 1)
 			break;
 
-		dest.push_back(wc);
 		p += len;
+		if (p >= end || nb >= NBUF)
+		{
+			dest.append(buf, nb);
+			nb = 0;
+		}
 	}
 }
 
@@ -279,11 +291,12 @@ CPUTResult CPUTConfigFile::LoadFile(const cString &szFilename)
 			const char *pEquals = FindFirst(pStart, pEnd, '=');
 			if (pEquals == pEnd)
 			{
-				cString name;
+                // No value, just a key, save it anyway
+				// Optimistically, we assume it's new
+				cString &name = pCurrBlock->mpValues[pCurrBlock->mnValueCount].szName;
 				AssignStr(name, pStart, pEnd, locale);
 
                 bool dup = false;
-                // No value, just a key, save it anyway
                 for(int ii=0;ii<pCurrBlock->mnValueCount;++ii)
                 {
                     if(!pCurrBlock->mpValues[ii].szName.compare(name))
@@ -294,7 +307,6 @@ CPUTResult CPUTConfigFile::LoadFile(const cString &szFilename)
                 }
                 if(!dup)
                 {
-					pCurrBlock->mpValues[pCurrBlock->mnValueCount].szName = name;
                     pCurrBlock->mnValueCount++;
                 }
 			}
@@ -308,7 +320,8 @@ CPUTResult CPUTConfigFile::LoadFile(const cString &szFilename)
 				RemoveWhitespace(pNameStart, pNameEnd);
 				RemoveWhitespace(pValStart, pValEnd);
 
-				cString name;
+				// Optimistically assume the name is new
+				cString &name = pCurrBlock->mpValues[pCurrBlock->mnValueCount].szName;
 				AssignStr(name, pNameStart, pNameEnd, locale);
 				std::transform(name.begin(), name.end(), name.begin(), ::tolower);
 
@@ -324,7 +337,6 @@ CPUTResult CPUTConfigFile::LoadFile(const cString &szFilename)
                 if(!dup)
                 {
                     AssignStr(pCurrBlock->mpValues[pCurrBlock->mnValueCount].szValue, pValStart, pValEnd, locale);
-                    pCurrBlock->mpValues[pCurrBlock->mnValueCount].szName = name;
                     pCurrBlock->mnValueCount++;
                 }
 			}
