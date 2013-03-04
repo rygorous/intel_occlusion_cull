@@ -92,13 +92,14 @@ void AABBoxRasterizerSSE::CreateTransformedAABBoxes(CPUTAssetSet **pAssetSet, UI
 
 	mpVisible = new bool[mNumModels];
 	mpTransformedAABBox = new TransformedAABBoxSSE[mNumModels];
-	mpBBoxVisible = new bool[mNumModels];
 	mpNumTriangles = new UINT[mNumModels];
 
 	UINT numPackets = (mNumModels + 3) / 4;
 	mpWorldBoxes = (WorldBBoxPacket *) _aligned_malloc(numPackets * sizeof(WorldBBoxPacket), 16);
 	memset(mpWorldBoxes, 0, numPackets * sizeof(WorldBBoxPacket));
-	
+
+	mpBBoxVisible = new bool[numPackets * 4];
+
 	for(UINT assetId = 0, modelId = 0; assetId < numAssetSets; assetId++)
 	{
 		for(UINT nodeId = 0; nodeId < pAssetSet[assetId]->GetAssetCount(); nodeId++)
