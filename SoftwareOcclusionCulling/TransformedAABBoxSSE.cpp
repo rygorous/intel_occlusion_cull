@@ -101,9 +101,11 @@ bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup, __m128 cumulati
 {
 	MatrixMultiply(mWorldMatrix, setup.mViewProjViewport, cumulativeMatrix);
 
-	__m128 center = _mm_set_ps(1.0f, mBBCenter.z, mBBCenter.y, mBBCenter.x);
-	__m128 mBBCenterOSxForm = TransformCoords(&center, cumulativeMatrix);
-    float w = mBBCenterOSxForm.m128_f32[3];
+	float w = mBBCenter.x * cumulativeMatrix[0].m128_f32[3] +
+		mBBCenter.y * cumulativeMatrix[1].m128_f32[3] +
+		mBBCenter.z * cumulativeMatrix[2].m128_f32[3] +
+		cumulativeMatrix[3].m128_f32[3];
+
 	if( w > 1.0f )
 	{
 		return mRadiusSq < w * setup.radiusThreshold;
