@@ -91,6 +91,7 @@ class AABBoxRasterizerSSE : public AABBoxRasterizer
 		UINT mNumModels;
 		TransformedAABBoxSSE *mpTransformedAABBox;
 		WorldBBoxPacket *mpWorldBoxes;
+		CPUTModelDX11 **mpModels;
 		bool *mpBBoxVisible;
 		UINT *mpNumTriangles;
 		__m128 *mViewMatrix;

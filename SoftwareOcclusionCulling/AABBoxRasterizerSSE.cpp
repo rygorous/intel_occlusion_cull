@@ -37,6 +37,7 @@ AABBoxRasterizerSSE::AABBoxRasterizerSSE()
 	: mNumModels(0),
 	  mpTransformedAABBox(NULL),
 	  mpWorldBoxes(NULL),
+	  mpModels(NULL),
 	  mpBBoxVisible(NULL),
 	  mpNumTriangles(NULL),
 	  mpRenderTargetPixels(NULL),
@@ -58,6 +59,9 @@ AABBoxRasterizerSSE::AABBoxRasterizerSSE()
 
 AABBoxRasterizerSSE::~AABBoxRasterizerSSE()
 {
+	for(UINT i = 0; i < mNumModels; i++)
+		mpModels[i]->Release();
+
 	_aligned_free(mViewMatrix);
 	_aligned_free(mProjMatrix);
 	_aligned_free(mpWorldBoxes);
@@ -65,6 +69,7 @@ AABBoxRasterizerSSE::~AABBoxRasterizerSSE()
 	SAFE_DELETE_ARRAY(mpTransformedAABBox);
 	SAFE_DELETE_ARRAY(mpBBoxVisible);
 	SAFE_DELETE_ARRAY(mpNumTriangles);
+	SAFE_DELETE_ARRAY(mpModels);
 }
 
 //--------------------------------------------------------------------
@@ -93,6 +98,7 @@ void AABBoxRasterizerSSE::CreateTransformedAABBoxes(CPUTAssetSet **pAssetSet, UI
 	mpVisible = new bool[mNumModels];
 	mpTransformedAABBox = new TransformedAABBoxSSE[mNumModels];
 	mpNumTriangles = new UINT[mNumModels];
+	mpModels = new CPUTModelDX11 *[mNumModels];
 
 	UINT numPackets = (mNumModels + 3) / 4;
 	mpWorldBoxes = (WorldBBoxPacket *) _aligned_malloc(numPackets * sizeof(WorldBBoxPacket), 16);
@@ -111,7 +117,9 @@ void AABBoxRasterizerSSE::CreateTransformedAABBoxes(CPUTAssetSet **pAssetSet, UI
 			{
 				CPUTModelDX11 *pModel = (CPUTModelDX11*)pRenderNode;
 				pModel = (CPUTModelDX11*)pRenderNode;
-	
+
+				mpModels[modelId] = pModel; pModel->AddRef();
+
 				mpTransformedAABBox[modelId].CreateAABBVertexIndexList(pModel);
 
 				float3 bbCenter, bbHalf;
@@ -153,27 +161,15 @@ void AABBoxRasterizerSSE::RenderVisible(CPUTAssetSet **pAssetSet,
 {
 	int count = 0;
 
-	for(UINT assetId = 0, modelId = 0; assetId < numAssetSets; assetId++)
+	for(UINT modelId = 0; modelId < mNumModels; modelId++)
 	{
-		for(UINT nodeId = 0; nodeId < pAssetSet[assetId]->GetAssetCount(); nodeId++)
+		if(mpVisible[modelId])
 		{
-			CPUTRenderNode* pRenderNode = NULL;
-			CPUTResult result = pAssetSet[assetId]->GetAssetByIndex(nodeId, &pRenderNode);
-			ASSERT((CPUT_SUCCESS == result), _L ("Failed getting asset by index")); 
-			if(pRenderNode->IsModel())
-			{
-				if(mpVisible[modelId])
-				{
-					CPUTModelDX11* model = (CPUTModelDX11*)pRenderNode;
-					model = (CPUTModelDX11*)pRenderNode;
-					model->Render(renderParams);
-					count++;
-				}
-				modelId++;			
-			}
-			pRenderNode->Release();
+			mpModels[modelId]->Render(renderParams);
+			count++;
 		}
 	}
+
 	mNumCulled =  mNumModels - count;
 }
 
