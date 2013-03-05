@@ -25,7 +25,7 @@ DepthBufferRasterizerSSEMT::DepthBufferRasterizerSSEMT()
 	mpBin = new UINT[size * MAX_TRIS_IN_BIN_MT];
 	mpBinModel = new USHORT[size * MAX_TRIS_IN_BIN_MT];
 	mpBinMesh = new USHORT[size * MAX_TRIS_IN_BIN_MT];
-	mpNumTrisInBin = new USHORT[size];
+	mpNumTrisInBin = (USHORT *) _aligned_malloc(size * sizeof(USHORT), 64);
 }
 
 DepthBufferRasterizerSSEMT::~DepthBufferRasterizerSSEMT()
@@ -33,7 +33,7 @@ DepthBufferRasterizerSSEMT::~DepthBufferRasterizerSSEMT()
 	SAFE_DELETE_ARRAY(mpBin);
 	SAFE_DELETE_ARRAY(mpBinModel);
 	SAFE_DELETE_ARRAY(mpBinMesh);
-	SAFE_DELETE_ARRAY(mpNumTrisInBin);
+	_aligned_free(mpNumTrisInBin);
 }
 
 //-------------------------------------------------------------------------------
