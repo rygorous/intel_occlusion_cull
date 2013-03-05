@@ -34,8 +34,6 @@ struct BoxTestSetup : public HelperSSE
 class TransformedAABBoxSSE : public HelperSSE
 {
 	public:
-		TransformedAABBoxSSE();
-		~TransformedAABBoxSSE();
 		void CreateAABBVertexIndexList(CPUTModelDX11 *pModel);
 		void TransformAABBoxAndDepthTest();
 
@@ -46,8 +44,7 @@ class TransformedAABBoxSSE : public HelperSSE
 		bool RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels, const __m128 xformedPos[]);
 
 	private:
-		CPUTModelDX11 *mpCPUTModel;
-		__m128 *mWorldMatrix;
+		float4x4 mWorldMatrix;
 
 		float3 mBBCenter;
 		float3 mBBHalf;

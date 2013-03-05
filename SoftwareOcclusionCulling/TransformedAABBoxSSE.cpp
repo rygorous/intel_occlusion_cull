@@ -65,30 +65,13 @@ void BoxTestSetup::Init(const __m128 viewMatrix[4], const __m128 projMatrix[4], 
 	radiusThreshold = occludeeSizeThreshold * occludeeSizeThreshold * tanOfHalfFov;
 }
 
-TransformedAABBoxSSE::TransformedAABBoxSSE()
-	: mpCPUTModel(NULL)
-{
-	mWorldMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
-}
-
-TransformedAABBoxSSE::~TransformedAABBoxSSE()
-{
-	_aligned_free(mWorldMatrix);
-}
-
 //--------------------------------------------------------------------------
 // Get the bounding box center and half vector
 // Create the vertex and index list for the triangles that make up the bounding box
 //--------------------------------------------------------------------------
 void TransformedAABBoxSSE::CreateAABBVertexIndexList(CPUTModelDX11 *pModel)
 {
-	mpCPUTModel = pModel;
-	float* world = (float*)pModel->GetWorldMatrix();
-
-	mWorldMatrix[0] = _mm_loadu_ps(world + 0);
-	mWorldMatrix[1] = _mm_loadu_ps(world + 4);
-	mWorldMatrix[2] = _mm_loadu_ps(world + 8);
-	mWorldMatrix[3] = _mm_loadu_ps(world + 12);
+	mWorldMatrix = *pModel->GetWorldMatrix();
 
 	pModel->GetBoundsObjectSpace(&mBBCenter, &mBBHalf);
 	mRadiusSq = mBBHalf.lengthSq();
@@ -99,7 +82,12 @@ void TransformedAABBoxSSE::CreateAABBVertexIndexList(CPUTModelDX11 *pModel)
 //----------------------------------------------------------------------------
 bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup, __m128 cumulativeMatrix[4])
 {
-	MatrixMultiply(mWorldMatrix, setup.mViewProjViewport, cumulativeMatrix);
+	__m128 worldMatrix[4];
+	worldMatrix[0] = _mm_loadu_ps(mWorldMatrix.r0.f);
+	worldMatrix[1] = _mm_loadu_ps(mWorldMatrix.r1.f);
+	worldMatrix[2] = _mm_loadu_ps(mWorldMatrix.r2.f);
+	worldMatrix[3] = _mm_loadu_ps(mWorldMatrix.r3.f);
+	MatrixMultiply(worldMatrix, setup.mViewProjViewport, cumulativeMatrix);
 
 	float w = mBBCenter.x * cumulativeMatrix[0].m128_f32[3] +
 		mBBCenter.y * cumulativeMatrix[1].m128_f32[3] +
