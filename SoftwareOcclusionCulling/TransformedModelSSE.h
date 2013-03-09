@@ -22,13 +22,15 @@
 #include "TransformedMeshSSE.h"
 #include "HelperSSE.h"
 
+struct BoxTestSetup;
+
 class TransformedModelSSE : public HelperSSE
 {
 	public:
 		TransformedModelSSE();
 		~TransformedModelSSE();
 		void CreateTransformedMeshes(CPUTModelDX11 *pModel);
-		void IsVisible(CPUTCamera *pCamera, __m128 *viewMatrix, __m128 *projMatrix);
+		void IsVisible(const BoxTestSetup &setup);
 		void TransformMeshes(UINT start, 
 							 UINT end,
 							 CPUTCamera *pCamera);
@@ -93,11 +95,6 @@ class TransformedModelSSE : public HelperSSE
 			}
 		}
 
-		inline void SetOccluderSizeThreshold(float occluderSizeThreshold)
-		{
-			mOccluderSizeThreshold = occluderSizeThreshold;
-		}
-
 		inline void SetVisible(bool visible){mVisible = visible;}
 
 		inline bool IsRasterized2DB()
@@ -110,16 +107,14 @@ class TransformedModelSSE : public HelperSSE
 		UINT mNumMeshes;
 		__m128 *mWorldMatrix;
 		__m128 *mCumulativeMatrix;
-		__m128 *mViewPortMatrix;
 				
 		float3 mBBCenterWS;
 		float3 mBBHalfWS;
 		bool mVisible;
 		bool mTooSmall;
-		float mOccluderSizeThreshold;
 
-		float4 mBBCenterOS;
-		float4 mBBHalfOS;
+		float3 mBBCenterOS;
+		float mRadiusSq;
 		TransformedMeshSSE *mpMeshes;
 		__m128 *mpXformedPos;
 };

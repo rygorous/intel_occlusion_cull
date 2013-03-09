@@ -47,13 +47,7 @@ class DepthBufferRasterizerSSE : public DepthBufferRasterizer, public HelperSSE
 		
 		inline void SetCamera(CPUTCamera *pCamera) {mpCamera = pCamera;}
 
-		inline void SetOccluderSizeThreshold(float occluderSizeThreshold)
-		{
-			for(UINT i = 0; i < mNumModels1; i++)
-			{
-				mpTransformedModels1[i].SetOccluderSizeThreshold(occluderSizeThreshold);
-			}
-		}
+		inline void SetOccluderSizeThreshold(float occluderSizeThreshold) {mOccluderSizeThreshold = occluderSizeThreshold;}
 
 		inline UINT GetNumOccluders() {return mNumModels1;}
 		inline UINT GetNumOccludersR2DB(){return mNumRasterized;}
@@ -116,6 +110,8 @@ class DepthBufferRasterizerSSE : public DepthBufferRasterizer, public HelperSSE
 		UINT mNumModelsA;
 		UINT mNumVerticesA;
 		UINT mNumTrianglesA;
+
+		float mOccluderSizeThreshold;
 
 		double mRasterizeTime[AVG_COUNTER];
 		CPUTTimerWin mRasterizeTimer;

@@ -16,6 +16,7 @@
 //--------------------------------------------------------------------------------------
 
 #include "HelperSSE.h"
+#include "CPUTCamera.h"
 
 HelperSSE::HelperSSE()
 {
@@ -90,4 +91,22 @@ void HelperSSE::MatrixMultiply(const __m128 *m1, const __m128 *m2, __m128 *resul
 	result[3] = _mm_add_ps(result[3], _mm_mul_ps(Z, m2[2]));
 	result[3] = _mm_add_ps(result[3], _mm_mul_ps(W, m2[3]));
 	
+}
+
+void BoxTestSetup::Init(const __m128 viewMatrix[4], const __m128 projMatrix[4], const float4x4 &viewportMatrix, CPUTCamera *pCamera, float occludeeSizeThreshold)
+{
+	__m128 viewPortMatrix[4];
+	viewPortMatrix[0] = _mm_loadu_ps((float*)&viewportMatrix.r0);
+	viewPortMatrix[1] = _mm_loadu_ps((float*)&viewportMatrix.r1);
+	viewPortMatrix[2] = _mm_loadu_ps((float*)&viewportMatrix.r2);
+	viewPortMatrix[3] = _mm_loadu_ps((float*)&viewportMatrix.r3);
+
+	MatrixMultiply(viewMatrix, projMatrix, mViewProjViewport);
+	MatrixMultiply(mViewProjViewport, viewPortMatrix, mViewProjViewport);
+
+	mpCamera = pCamera;
+
+	float fov = pCamera->GetFov();
+	float tanOfHalfFov = tanf(fov * 0.5f);
+	radiusThreshold = occludeeSizeThreshold * occludeeSizeThreshold * tanOfHalfFov;
 }

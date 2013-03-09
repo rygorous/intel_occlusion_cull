@@ -42,9 +42,12 @@ void DepthBufferRasterizerSSEST::IsVisible(CPUTCamera* pCamera)
 {
 	mpCamera = pCamera;
 	
+	BoxTestSetup setup;
+	setup.Init(mViewMatrix, mProjMatrix, viewportMatrix, pCamera, mOccluderSizeThreshold);
+
 	for(UINT i = 0; i < mNumModels1; i++)
 	{
-		mpTransformedModels1[i].IsVisible(mpCamera, mViewMatrix, mProjMatrix);
+		mpTransformedModels1[i].IsVisible(setup);
 	}
 }
 

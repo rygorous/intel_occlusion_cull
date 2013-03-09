@@ -160,4 +160,16 @@ class HelperSSE
 		void MatrixMultiply(const __m128 *m1, const __m128 *m2, __m128 *result);
 };
 
+class CPUTCamera;
+struct float4x4;
+
+struct BoxTestSetup : public HelperSSE
+{
+	__m128 mViewProjViewport[4];
+	CPUTCamera *mpCamera;
+	float radiusThreshold;
+
+	void Init(const __m128 viewMatrix[4], const __m128 projMatrix[4], const float4x4 &viewportMatix, CPUTCamera *pCamera, float sizeThreshold);
+};
+
 #endif 

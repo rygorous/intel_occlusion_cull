@@ -184,7 +184,7 @@ void AABBoxRasterizerSSE::Render(CPUTAssetSet **pAssetSet,
 	int count = 0;
 
 	BoxTestSetup setup;
-	setup.Init(mViewMatrix, mProjMatrix, mpCamera, mOccludeeSizeThreshold);
+	setup.Init(mViewMatrix, mProjMatrix, viewportMatrix, mpCamera, mOccludeeSizeThreshold);
 
 	__m128 cumulativeMatrix[4];
 

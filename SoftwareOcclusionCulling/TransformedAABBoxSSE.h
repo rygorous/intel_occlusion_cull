@@ -23,14 +23,6 @@
 #include "Constants.h"
 #include "HelperSSE.h"
 
-struct BoxTestSetup : public HelperSSE
-{
-	__m128 mViewProjViewport[4];
-	float radiusThreshold;
-
-	void Init(const __m128 viewMatrix[4], const __m128 projMatrix[4], CPUTCamera *pCamera, float occludeeSizeThreshold);
-};
-
 class TransformedAABBoxSSE : public HelperSSE
 {
 	public:

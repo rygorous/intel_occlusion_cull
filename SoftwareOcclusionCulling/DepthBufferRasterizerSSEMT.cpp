@@ -73,9 +73,12 @@ void DepthBufferRasterizerSSEMT::IsVisible(UINT taskId, UINT taskCount)
 	UINT start, end;
 	GetWorkExtent(&start, &end, taskId, taskCount, mNumModels1);
 
+	BoxTestSetup setup;
+	setup.Init(mViewMatrix, mProjMatrix, viewportMatrix, mpCamera, mOccluderSizeThreshold);
+
 	for (UINT i = start; i < end; i++)
 	{
-		mpTransformedModels1[i].IsVisible(mpCamera, mViewMatrix, mProjMatrix);
+		mpTransformedModels1[i].IsVisible(setup);
 	}
 }
 

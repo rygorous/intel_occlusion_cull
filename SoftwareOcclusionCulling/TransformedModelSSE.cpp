@@ -21,21 +21,13 @@ TransformedModelSSE::TransformedModelSSE()
 	  mNumMeshes(0),
 	  mWorldMatrix(NULL),
 	  mCumulativeMatrix(NULL),
-	  mViewPortMatrix(NULL),
 	  mVisible(false),
 	  mTooSmall(false),
-	  mOccluderSizeThreshold(0.0),
 	  mpMeshes(NULL),
 	  mpXformedPos(NULL)
 {
 	mWorldMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
 	mCumulativeMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
-	mViewPortMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
-	
-	mViewPortMatrix[0] = _mm_loadu_ps((float*)&viewportMatrix.r0);
-	mViewPortMatrix[1] = _mm_loadu_ps((float*)&viewportMatrix.r1);
-	mViewPortMatrix[2] = _mm_loadu_ps((float*)&viewportMatrix.r2);
-	mViewPortMatrix[3] = _mm_loadu_ps((float*)&viewportMatrix.r3);	
 }
 
 TransformedModelSSE::~TransformedModelSSE()
@@ -43,7 +35,6 @@ TransformedModelSSE::~TransformedModelSSE()
 	SAFE_DELETE_ARRAY(mpMeshes);
 	_aligned_free(mWorldMatrix);
 	_aligned_free(mCumulativeMatrix);
-	_aligned_free(mViewPortMatrix);
 }
 
 //--------------------------------------------------------------------
@@ -63,8 +54,8 @@ void TransformedModelSSE::CreateTransformedMeshes(CPUTModelDX11 *pModel)
 	float3 center, half;
 	pModel->GetBoundsObjectSpace(&center, &half);
 
-	mBBCenterOS = float4(center, 1.0f);
-	mBBHalfOS = float4(half, 0.0f);
+	mBBCenterOS = center;
+	mRadiusSq = half.lengthSq();
 
 	mpMeshes = new TransformedMeshSSE[mNumMeshes];
 
@@ -78,31 +69,23 @@ void TransformedModelSSE::CreateTransformedMeshes(CPUTModelDX11 *pModel)
 //------------------------------------------------------------------
 // Determine is the occluder model is inside view frustum
 //------------------------------------------------------------------
-void TransformedModelSSE::IsVisible(CPUTCamera* pCamera, __m128 *viewMatrix, __m128 *projMatrix)
+void TransformedModelSSE::IsVisible(const BoxTestSetup &setup)
 {
 	mpCPUTModel->GetBoundsWorldSpace(&mBBCenterWS, &mBBHalfWS);
-	mVisible = pCamera->mFrustum.IsVisible(mBBCenterWS, mBBHalfWS);
+	mVisible = setup.mpCamera->mFrustum.IsVisible(mBBCenterWS, mBBHalfWS);
 	
 	if(mVisible)
 	{
-		__m128 centerOS = _mm_set_ps(mBBCenterOS.w, mBBCenterOS.z, mBBCenterOS.y, mBBCenterOS.x);
-	
-		float radius = float3(mBBHalfOS.x, mBBHalfOS.y, mBBHalfOS.z).lengthSq();
-		float fov = pCamera->GetFov();
-		float tanOfHalfFov = tanf(fov * 0.5f);
-	
-		MatrixMultiply(mWorldMatrix, viewMatrix, mCumulativeMatrix);
-		MatrixMultiply(mCumulativeMatrix, projMatrix, mCumulativeMatrix);
-		MatrixMultiply(mCumulativeMatrix, mViewPortMatrix, mCumulativeMatrix);
+		MatrixMultiply(mWorldMatrix, setup.mViewProjViewport, mCumulativeMatrix);
 
-		__m128 centerOSxForm = TransformCoords(&centerOS, mCumulativeMatrix);
+		float w = mBBCenterOS.x * mCumulativeMatrix[0].m128_f32[3] +
+			mBBCenterOS.y * mCumulativeMatrix[1].m128_f32[3] +
+			mBBCenterOS.z * mCumulativeMatrix[2].m128_f32[3] +
+			mCumulativeMatrix[3].m128_f32[3];
 
-		float w = centerOSxForm.m128_f32[3];
 		if(w > 1.0f)
 		{
-			float radiusDivW = radius / w;
-			float radiusDivWDivTanFov = radiusDivW / tanOfHalfFov;
-			mTooSmall = radiusDivWDivTanFov < (mOccluderSizeThreshold * mOccluderSizeThreshold) ? true : false;
+			mTooSmall = mRadiusSq < w * setup.radiusThreshold;
 		}
 		else
 		{

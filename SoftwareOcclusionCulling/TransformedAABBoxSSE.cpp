@@ -49,22 +49,6 @@ static const UINT sBBxInd[AABB_VERTICES] = { 1, 0, 0, 1, 1, 1, 0, 0 };
 static const UINT sBByInd[AABB_VERTICES] = { 1, 1, 1, 1, 0, 0, 0, 0 };
 static const UINT sBBzInd[AABB_VERTICES] = { 1, 1, 0, 0, 0, 1, 1, 0 };
 
-void BoxTestSetup::Init(const __m128 viewMatrix[4], const __m128 projMatrix[4], CPUTCamera *pCamera, float occludeeSizeThreshold)
-{
-	__m128 viewPortMatrix[4];
-	viewPortMatrix[0] = _mm_loadu_ps((float*)&viewportMatrix.r0);
-	viewPortMatrix[1] = _mm_loadu_ps((float*)&viewportMatrix.r1);
-	viewPortMatrix[2] = _mm_loadu_ps((float*)&viewportMatrix.r2);
-	viewPortMatrix[3] = _mm_loadu_ps((float*)&viewportMatrix.r3);
-
-	MatrixMultiply(viewMatrix, projMatrix, mViewProjViewport);
-	MatrixMultiply(mViewProjViewport, viewPortMatrix, mViewProjViewport);
-
-	float fov = pCamera->GetFov();
-	float tanOfHalfFov = tanf(fov * 0.5f);
-	radiusThreshold = occludeeSizeThreshold * occludeeSizeThreshold * tanOfHalfFov;
-}
-
 //--------------------------------------------------------------------------
 // Get the bounding box center and half vector
 // Create the vertex and index list for the triangles that make up the bounding box
