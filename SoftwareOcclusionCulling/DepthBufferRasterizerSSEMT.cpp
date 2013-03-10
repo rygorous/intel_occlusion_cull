@@ -22,17 +22,13 @@ DepthBufferRasterizerSSEMT::DepthBufferRasterizerSSEMT()
 	: DepthBufferRasterizerSSE()
 {
 	int size = SCREENH_IN_TILES * SCREENW_IN_TILES *  NUM_XFORMVERTS_TASKS;
-	mpBin = new UINT[size * MAX_TRIS_IN_BIN_MT];
-	mpBinModel = new USHORT[size * MAX_TRIS_IN_BIN_MT];
-	mpBinMesh = new USHORT[size * MAX_TRIS_IN_BIN_MT];
+	mpBin = new BinTriangle[size * MAX_TRIS_IN_BIN_MT];
 	mpNumTrisInBin = (USHORT *) _aligned_malloc(size * sizeof(USHORT), 64);
 }
 
 DepthBufferRasterizerSSEMT::~DepthBufferRasterizerSSEMT()
 {
 	SAFE_DELETE_ARRAY(mpBin);
-	SAFE_DELETE_ARRAY(mpBinModel);
-	SAFE_DELETE_ARRAY(mpBinMesh);
 	_aligned_free(mpNumTrisInBin);
 }
 
@@ -220,7 +216,7 @@ void DepthBufferRasterizerSSEMT::BinTransformedMeshes(UINT taskId, UINT taskCoun
         UINT thisSurfaceStartIndex = max( 0, (int)startIndex - (int)runningTriangleCount );
         UINT thisSurfaceEndIndex   = min( thisSurfaceStartIndex + remainingTrianglesPerTask, thisSurfaceTriangleCount) - 1;
 
-       	mpTransformedModels1[ss].BinTransformedTrianglesMT(taskId, ss, thisSurfaceStartIndex, thisSurfaceEndIndex, mpBin, mpBinModel, mpBinMesh, mpNumTrisInBin);
+		mpTransformedModels1[ss].BinTransformedTrianglesMT(taskId, ss, thisSurfaceStartIndex, thisSurfaceEndIndex, mpBin, mpNumTrisInBin);
 
 		remainingTrianglesPerTask -= ( thisSurfaceEndIndex + 1 - thisSurfaceStartIndex);
         if( remainingTrianglesPerTask <= 0 ) break;
@@ -302,7 +298,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT rawT
 	UINT offset2 = YOFFSET2_MT * tileY + XOFFSET2_MT * tileX;
 	UINT numTrisInBin = mpNumTrisInBin[offset1 + TOFFSET1_MT * bin];
 
-	__m128 gatherBuf[4][3];
+	__m128 gatherBuf[4][2];
 	bool done = false;
 	bool allBinsEmpty = true;
 	mNumRasterizedTris[taskId] = numTrisInBin;
@@ -328,10 +324,10 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT rawT
 			{
 				 break; // No more tris in the bins
 			}
-			USHORT modelId = mpBinModel[offset2 + bin * MAX_TRIS_IN_BIN_MT + binIndex];
-			USHORT meshId = mpBinMesh[offset2 + bin * MAX_TRIS_IN_BIN_MT + binIndex];
-			UINT triIdx = mpBin[offset2 + bin * MAX_TRIS_IN_BIN_MT + binIndex];
-			mpTransformedModels1[modelId].Gather(gatherBuf[ii], meshId, triIdx);
+
+			const BinTriangle *pTri = &mpBin[offset2 + bin * MAX_TRIS_IN_BIN_MT + binIndex];
+			gatherBuf[ii][0] = _mm_castsi128_ps(_mm_loadu_si128((const __m128i *) &pTri->vert[0].xy));
+			gatherBuf[ii][1] = _mm_castsi128_ps(_mm_loadl_epi64((const __m128i *) &pTri->Z[1]));
 			allBinsEmpty = false;
 			numSimdTris++; 
 
@@ -347,21 +343,25 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT rawT
 
 		// use fixed-point only for X and Y.
 		VecS32 fixX[3], fixY[3];
-		VecF32 Z[3];
-		for(int i = 0; i < 3; i++)
-		{
-			// read 4 verts
-			__m128 v0 = gatherBuf[0][i];
-			__m128 v1 = gatherBuf[1][i];
-			__m128 v2 = gatherBuf[2][i];
-			__m128 v3 = gatherBuf[3][i];
 
-			// transpose into SoA layout
+		{
+			// read vertex data
+			__m128 v0 = gatherBuf[0][0];
+			__m128 v1 = gatherBuf[1][0];
+			__m128 v2 = gatherBuf[2][0];
+			__m128 v3 = gatherBuf[3][0];
+
+			// transpose
 			_MM_TRANSPOSE4_PS(v0, v1, v2, v3);
 
-			fixX[i] = ftoi_round(VecF32(v0));
-			fixY[i] = ftoi_round(VecF32(v1));
-			Z[i] = VecF32(v2);
+			// Now v0, v1, v2 contain the corresponding verts
+			// v3 also contains Z[0] but we don't care here
+			fixX[0] = VecS32(_mm_srai_epi32(_mm_slli_epi32(_mm_castps_si128(v0), 16), 16));
+			fixY[0] = VecS32(_mm_srai_epi32(_mm_castps_si128(v0), 16));
+			fixX[1] = VecS32(_mm_srai_epi32(_mm_slli_epi32(_mm_castps_si128(v1), 16), 16));
+			fixY[1] = VecS32(_mm_srai_epi32(_mm_castps_si128(v1), 16));
+			fixX[2] = VecS32(_mm_srai_epi32(_mm_slli_epi32(_mm_castps_si128(v2), 16), 16));
+			fixY[2] = VecS32(_mm_srai_epi32(_mm_castps_si128(v2), 16));
 		}
 
 		// Fab(x, y) =     Ax       +       By     +      C              = 0
@@ -381,14 +381,6 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT rawT
 		VecS32 C1 = fixX[2] * fixY[0] - fixX[0] * fixY[2];
 		VecS32 C2 = fixX[0] * fixY[1] - fixX[1] * fixY[0];
 
-		// Compute triangle area
-		VecS32 triArea = B2 * A1 - B1 * A2;
-		VecF32 oneOverTriArea = VecF32(1.0f) / itof(triArea);
-
-		// Z setup
-		Z[1] = (Z[1] - Z[0]) * oneOverTriArea;
-		Z[2] = (Z[2] - Z[0]) * oneOverTriArea;
-
 		// Use bounding box traversal strategy to determine which pixels to rasterize 
 		VecS32 startX = vmax(vmin(vmin(fixX[0], fixX[1]), fixX[2]), VecS32(tileStartX)) & VecS32(~1);
 		VecS32 endX   = vmin(vmax(vmax(fixX[0], fixX[1]), fixX[2]), VecS32(tileEndX));
@@ -401,10 +393,9 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT rawT
         {
 			// Extract this triangle's properties from the SIMD versions
             VecF32 zz[3];
-			for(int vv = 0; vv < 3; vv++)
-			{
-				zz[vv] = VecF32(Z[vv].lane[lane]);
-			}
+			zz[0] = VecF32(gatherBuf[lane][0].m128_f32[3]);
+			zz[1] = VecF32(gatherBuf[lane][1].m128_f32[0]);
+			zz[2] = VecF32(gatherBuf[lane][1].m128_f32[1]);
 
 			int startXx = startX.lane[lane];
 			int endXx	= endX.lane[lane];

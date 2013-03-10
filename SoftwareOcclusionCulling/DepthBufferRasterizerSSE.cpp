@@ -30,8 +30,6 @@ DepthBufferRasterizerSSE::DepthBufferRasterizerSSE()
 	  mpRenderTargetPixels(NULL),
 	  mNumRasterized(NULL),
 	  mpBin(NULL),
-	  mpBinModel(NULL),
-	  mpBinMesh(NULL),
 	  mpNumTrisInBin(NULL),
 	  mTimeCounter(0)
 {

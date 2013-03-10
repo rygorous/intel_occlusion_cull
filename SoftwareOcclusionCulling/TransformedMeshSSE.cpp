@@ -16,6 +16,7 @@
 //--------------------------------------------------------------------------------------
 
 #include "TransformedMeshSSE.h"
+#include "DepthBufferRasterizerSSE.h"
 
 TransformedMeshSSE::TransformedMeshSSE()
 	: mNumVertices(0),
@@ -93,9 +94,7 @@ void TransformedMeshSSE::BinTransformedTrianglesST(UINT taskId,
 												   UINT meshId,
 												   UINT start,
 												   UINT end,
-												   UINT* pBin,
-												   USHORT* pBinModel,
-												   USHORT* pBinMesh,
+												   BinTriangle* pBin,
 												   USHORT* pNumTrisInBin)
 {
 	int numLanes = SSE;
@@ -111,33 +110,35 @@ void TransformedMeshSSE::BinTransformedTrianglesST(UINT taskId,
 		vFloat4 xformedPos[3];		
 		Gather(xformedPos, index, numLanes);
 		
-		// TODO: Maybe convert to Fixed pt and store it once so that dont have to convert to fixedPt again during rasterization
-		vFxPt4 xFormedFxPtPos[3];
+		VecS32 fixX[3], fixY[3];
+		VecS32 vXY[3];
+		VecF32 vZ[3];
 		for(int i = 0; i < 3; i++)
 		{
-			xFormedFxPtPos[i].X = ftoi_round(xformedPos[i].X);
-			xFormedFxPtPos[i].Y = ftoi_round(xformedPos[i].Y);
-			xFormedFxPtPos[i].Z = ftoi_round(xformedPos[i].Z);
-			xFormedFxPtPos[i].W = ftoi_round(xformedPos[i].W);
+			fixX[i] = ftoi_round(xformedPos[i].X);
+			fixY[i] = ftoi_round(xformedPos[i].Y);
+
+			__m128i inter0 = _mm_unpacklo_epi32(fixX[i].simd, fixY[i].simd);
+			__m128i inter1 = _mm_unpackhi_epi32(fixX[i].simd, fixY[i].simd);
+
+			vXY[i] = VecS32(_mm_packs_epi32(inter0, inter1));
+			vZ[i] = xformedPos[i].Z;
 		}
 
-		// Compute triangle are
-		VecS32 A0 = xFormedFxPtPos[1].Y - xFormedFxPtPos[2].Y;
-		VecS32 B0 = xFormedFxPtPos[2].X - xFormedFxPtPos[1].X;
-		VecS32 C0 = xFormedFxPtPos[1].X * xFormedFxPtPos[2].Y - xFormedFxPtPos[2].X * xFormedFxPtPos[1].Y;
-
-		VecS32 triArea = A0 * xFormedFxPtPos[0].X;
-		triArea += B0 * xFormedFxPtPos[0].Y;
-		triArea += C0;
-
+		// Compute triangle area
+		VecS32 triArea = (fixX[1] - fixX[0]) * (fixY[2] - fixY[0]) - (fixX[0] - fixX[2]) * (fixY[0] - fixY[1]);
 		VecF32 oneOverTriArea = VecF32(1.0f) / itof(triArea);
 
-		// Find bounding box for screen space triangle in terms of pixels
-		VecS32 vStartX = vmax(vmin(vmin(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), VecS32(0));
-		VecS32 vEndX   = vmin(vmax(vmax(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X) + VecS32(1), VecS32(SCREENW));
+		// Z setup
+		vZ[1] = (vZ[1] - vZ[0]) * oneOverTriArea;
+		vZ[2] = (vZ[2] - vZ[0]) * oneOverTriArea;
 
-        VecS32 vStartY = vmax(vmin(vmin(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), VecS32(0));
-        VecS32 vEndY   = vmin(vmax(vmax(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y) + VecS32(1), VecS32(SCREENH));
+		// Find bounding box for screen space triangle in terms of pixels
+		VecS32 vStartX = vmax(vmin(vmin(fixX[0], fixX[1]), fixX[2]), VecS32(0));
+		VecS32 vEndX   = vmin(vmax(vmax(fixX[0], fixX[1]), fixX[2]), VecS32(SCREENW - 1));
+
+        VecS32 vStartY = vmax(vmin(vmin(fixY[0], fixY[1]), fixY[2]), VecS32(0));
+        VecS32 vEndY   = vmin(vmax(vmax(fixY[0], fixY[1]), fixY[2]), VecS32(SCREENH - 1));
 
 		for(int i = 0; i < numLanes; i++)
 		{
@@ -170,9 +171,15 @@ void TransformedMeshSSE::BinTransformedTrianglesST(UINT taskId,
 				{
 					int idx1 = offset1 + (XOFFSET1_ST * col) + taskId;
 					int idx2 = offset2 + (XOFFSET2_ST * col) + (taskId * MAX_TRIS_IN_BIN_ST) + pNumTrisInBin[idx1];
-					pBin[idx2] = index + i;
-					pBinModel[idx2] = modelId;
-					pBinMesh[idx2] = meshId;
+
+					BinTriangle *pTri = pBin + idx2;
+					pTri->vert[0].xy = vXY[0].lane[i];
+					pTri->vert[1].xy = vXY[1].lane[i];
+					pTri->vert[2].xy = vXY[2].lane[i];
+					pTri->Z[0] = vZ[0].lane[i];
+					pTri->Z[1] = vZ[1].lane[i];
+					pTri->Z[2] = vZ[2].lane[i];
+
 					pNumTrisInBin[idx1] += 1;
 				}
 			}
@@ -188,9 +195,7 @@ void TransformedMeshSSE::BinTransformedTrianglesMT(UINT taskId,
 												   UINT meshId,
 												   UINT start,
 												   UINT end,
-												   UINT* pBin,
-												   USHORT* pBinModel,
-												   USHORT* pBinMesh,
+												   BinTriangle* pBin,
 												   USHORT* pNumTrisInBin)
 {
 	int numLanes = SSE;
@@ -209,18 +214,29 @@ void TransformedMeshSSE::BinTransformedTrianglesMT(UINT taskId,
 		vFloat4 xformedPos[3];		
 		Gather(xformedPos, index, numLanes);
 		
-		// TODO: Maybe convert to Fixed pt and store it once so that dont have to convert to fixedPt again during rasterization
 		VecS32 fixX[3], fixY[3];
+		VecS32 vXY[3];
+		VecF32 vZ[3];
 		for(int i = 0; i < 3; i++)
 		{
 			fixX[i] = ftoi_round(xformedPos[i].X);
 			fixY[i] = ftoi_round(xformedPos[i].Y);
+
+			__m128i inter0 = _mm_unpacklo_epi32(fixX[i].simd, fixY[i].simd);
+			__m128i inter1 = _mm_unpackhi_epi32(fixX[i].simd, fixY[i].simd);
+
+			vXY[i] = VecS32(_mm_packs_epi32(inter0, inter1));
+			vZ[i] = xformedPos[i].Z;
 		}
 
 		// Compute triangle area
 		VecS32 triArea = (fixX[1] - fixX[0]) * (fixY[2] - fixY[0]) - (fixX[0] - fixX[2]) * (fixY[0] - fixY[1]);
 		VecF32 oneOverTriArea = VecF32(1.0f) / itof(triArea);
-		
+
+		// Z setup
+		vZ[1] = (vZ[1] - vZ[0]) * oneOverTriArea;
+		vZ[2] = (vZ[2] - vZ[0]) * oneOverTriArea;
+
 		// Find bounding box for screen space triangle in terms of pixels
 		VecS32 vStartX = vmax(vmin(vmin(fixX[0], fixX[1]), fixX[2]), VecS32(0));
 		VecS32 vEndX   = vmin(vmax(vmax(fixX[0], fixX[1]), fixX[2]), VecS32(SCREENW - 1));
@@ -263,20 +279,18 @@ void TransformedMeshSSE::BinTransformedTrianglesMT(UINT taskId,
 				{
 					int idx1 = offset1 + (XOFFSET1_MT * col) + (TOFFSET1_MT * taskId);
 					int idx2 = offset2 + (XOFFSET2_MT * col) + (taskId * MAX_TRIS_IN_BIN_MT) + pNumTrisInBin[idx1];
-					pBin[idx2] = index + i;
-					pBinModel[idx2] = modelId;
-					pBinMesh[idx2] = meshId;
+
+					BinTriangle *pTri = pBin + idx2;
+					pTri->vert[0].xy = vXY[0].lane[i];
+					pTri->vert[1].xy = vXY[1].lane[i];
+					pTri->vert[2].xy = vXY[2].lane[i];
+					pTri->Z[0] = vZ[0].lane[i];
+					pTri->Z[1] = vZ[1].lane[i];
+					pTri->Z[2] = vZ[2].lane[i];
+
 					pNumTrisInBin[idx1] += 1;
 				}
 			}
 		}
 	}
-}
-
-
-void TransformedMeshSSE::GetOneTriangleData(__m128 xformedPos[3], UINT triId)
-{
-	const UINT *inds = &mpIndices[triId * 3];
-	for(int i = 0; i < 3; i++)
-		xformedPos[i] = mpXformedPos[inds[i]];
 }

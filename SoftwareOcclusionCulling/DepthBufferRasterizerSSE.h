@@ -20,6 +20,21 @@
 #include "TransformedModelSSE.h"
 #include "HelperSSE.h"
 
+union XY
+{
+	struct
+	{
+		short x, y;
+	};
+	unsigned int xy;
+};
+
+struct BinTriangle
+{
+	XY vert[3];
+	float Z[3];	// Plane equation, not just values at the three verts
+};
+
 class DepthBufferRasterizerSSE : public DepthBufferRasterizer, public HelperSSE
 {
 	public:
@@ -100,9 +115,7 @@ class DepthBufferRasterizerSSE : public DepthBufferRasterizer, public HelperSSE
 		__m128 *mProjMatrix;
 		UINT *mpRenderTargetPixels;
 		UINT mNumRasterized;
-		UINT *mpBin;				 // triangle index
-		USHORT *mpBinModel;			 // model index
-		USHORT *mpBinMesh;			 // mesh index
+		BinTriangle *mpBin;
 		USHORT *mpNumTrisInBin;      // number of triangles in the bin
 		UINT mTimeCounter;
 

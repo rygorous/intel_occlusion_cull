@@ -128,9 +128,7 @@ void TransformedModelSSE::BinTransformedTrianglesST(UINT taskId,
 												    UINT modelId,
 											        UINT start,
 											        UINT end,
-												    UINT* pBin,
-												    USHORT* pBinModel,
-												    USHORT* pBinMesh,
+													BinTriangle* pBin,
 												    USHORT* pNumTrisInBin)
 {
 	if(mVisible && !mTooSmall)
@@ -144,7 +142,7 @@ void TransformedModelSSE::BinTransformedTrianglesST(UINT taskId,
 				continue;
 			}
 
-			mpMeshes[meshId].BinTransformedTrianglesST(taskId, modelId, meshId, start, end, pBin, pBinModel, pBinMesh, pNumTrisInBin);
+			mpMeshes[meshId].BinTransformedTrianglesST(taskId, modelId, meshId, start, end, pBin, pNumTrisInBin);
 		}
 	}
 }
@@ -158,9 +156,7 @@ void TransformedModelSSE::BinTransformedTrianglesMT(UINT taskId,
 												    UINT modelId,
 											        UINT start,
 											        UINT end,
-												    UINT* pBin,
-												    USHORT* pBinModel,
-												    USHORT* pBinMesh,
+													BinTriangle* pBin,
 												    USHORT* pNumTrisInBin)
 {
 	if(mVisible && !mTooSmall)
@@ -174,14 +170,7 @@ void TransformedModelSSE::BinTransformedTrianglesMT(UINT taskId,
 				continue;
 			}
 
-			mpMeshes[meshId].BinTransformedTrianglesMT(taskId, modelId, meshId, start, end, pBin, pBinModel, pBinMesh, pNumTrisInBin);
+			mpMeshes[meshId].BinTransformedTrianglesMT(taskId, modelId, meshId, start, end, pBin, pNumTrisInBin);
 		}
 	}
-}
-
-void TransformedModelSSE::Gather(__m128 xformedPos[3],
-								 UINT meshId,
-								 UINT triId)
-{
-	mpMeshes[meshId].GetOneTriangleData(xformedPos, triId); 
 }

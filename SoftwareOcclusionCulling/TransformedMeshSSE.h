@@ -22,6 +22,8 @@
 #include "Constants.h"
 #include "HelperSSE.h"
 
+struct BinTriangle;
+
 class TransformedMeshSSE : public HelperSSE
 {
 	public:
@@ -37,9 +39,7 @@ class TransformedMeshSSE : public HelperSSE
 									   UINT meshId,
 									   UINT start,
 									   UINT end,
-									   UINT* pBin,
-									   USHORT* pBinModel,
-									   USHORT* pBinMesh,
+									   BinTriangle* pBin,
 									   USHORT* pNumTrisInBin);
 
 		void BinTransformedTrianglesMT(UINT taskId,
@@ -47,12 +47,8 @@ class TransformedMeshSSE : public HelperSSE
 									   UINT meshId,
 									   UINT start,
 									   UINT end,
-									   UINT* pBin,
-									   USHORT* pBinModel,
-									   USHORT* pBinMesh,
+									   BinTriangle* pBin,
 									   USHORT* pNumTrisInBin);
-
-		void GetOneTriangleData(__m128 xformedPos[3], UINT triId);
 
 		inline UINT GetNumTriangles() {return mNumTriangles;}
 		inline UINT GetNumVertices() {return mNumVertices;}

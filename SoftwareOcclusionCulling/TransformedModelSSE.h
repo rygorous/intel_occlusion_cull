@@ -22,7 +22,7 @@
 #include "TransformedMeshSSE.h"
 #include "HelperSSE.h"
 
-struct BoxTestSetup;
+struct BinTriangle;
 
 class TransformedModelSSE : public HelperSSE
 {
@@ -39,23 +39,15 @@ class TransformedModelSSE : public HelperSSE
 									   UINT modelId,
 									   UINT start,
 									   UINT end,
-									   UINT* pBin,
-									   USHORT* pBinModel,
-									   USHORT* pBinMesh,
+									   BinTriangle* pBin,
 									   USHORT* pNumTrisInBin);
 
 		void BinTransformedTrianglesMT(UINT taskId,
 									   UINT modelId,
 									   UINT start,
 									   UINT end,
-									   UINT* pBin,
-									   USHORT* pBinModel,
-									   USHORT* pBinMesh,
+									   BinTriangle* pBin,
 									   USHORT* pNumTrisInBin);
-
-		void Gather(__m128 xformedPos[3],
-			        UINT meshId,
-					UINT triId);
 
 		inline UINT GetNumVertices()
 		{
