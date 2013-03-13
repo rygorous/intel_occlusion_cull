@@ -162,10 +162,10 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
     UINT tileY = tileId / screenWidthInTiles;
 
     int tileStartX = tileX * TILE_WIDTH_IN_PIXELS;
-	int tileEndX   = tileStartX + TILE_WIDTH_IN_PIXELS - 1;
+	int tileEndX   = min(tileStartX + TILE_WIDTH_IN_PIXELS, SCREENW) - 1;
 	
 	int tileStartY = tileY * TILE_HEIGHT_IN_PIXELS;
-	int tileEndY   = tileStartY + TILE_HEIGHT_IN_PIXELS - 1;
+	int tileEndY   = min(tileStartY + TILE_HEIGHT_IN_PIXELS, SCREENH) - 1;
 
 	ClearDepthTile(tileStartX, tileStartY, tileEndX+1, tileEndY+1, idx);
 
