@@ -261,7 +261,7 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(VOID* tas
 	sample->RasterizeBinnedTrianglesToDepthBuffer(taskId, taskCount);
 }
 
-float __declspec(align(16)) gDepthSummary[(SCREENW/8) * (SCREENH/8) * 4];
+float gDepthSummary[(SCREENW/8) * (SCREENH/8)];
 
 //-------------------------------------------------------------------------------
 // For each tile go through all the bins and process all the triangles in it.
@@ -478,34 +478,34 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT rawT
 	for(int yt = y0s; yt <= y1s; yt++)
 	{
 		const float *srcRow = pDepthBuffer + (yt * 8) * SCREENW;
-		float *dstRow = gDepthSummary + yt * (SCREENW/8) * 4;
+		float *dstRow = gDepthSummary + yt * (SCREENW/8);
 
 		for(int xt = x0s; xt <= x1s; xt++)
 		{
 			const float *src = srcRow + (xt * 8) * 2;
 
-			// mins across four 4x4 blocks
-			static const int quadOffs[4] = { 0*SCREENW + 0*2, 0*SCREENW + 2*2, 2*SCREENW + 0*2, 2*SCREENW + 2*2 };
-			__m128 min00 = _mm_set1_ps(1.0f);
-			__m128 min01 = _mm_set1_ps(1.0f);
-			__m128 min10 = _mm_set1_ps(1.0f);
-			__m128 min11 = _mm_set1_ps(1.0f);
-
-			for(int quad = 0; quad < 4; quad++)
+			static const int ofsTab[8] = 
 			{
-				const float *srcQuad = src + quadOffs[quad];
-				min00 = _mm_min_ps(min00, _mm_load_ps(srcQuad + 0*SCREENW + 0*2));
-				min01 = _mm_min_ps(min01, _mm_load_ps(srcQuad + 0*SCREENW + 4*2));
-				min10 = _mm_min_ps(min10, _mm_load_ps(srcQuad + 4*SCREENW + 0*2));
-				min11 = _mm_min_ps(min11, _mm_load_ps(srcQuad + 4*SCREENW + 4*2));
+				0*SCREENW + 0*2, 0*SCREENW + 4*2,
+				2*SCREENW + 0*2, 2*SCREENW + 4*2,
+				4*SCREENW + 0*2, 4*SCREENW + 4*2,
+				6*SCREENW + 0*2, 6*SCREENW + 4*2
+			};
+			__m128 min0 = _mm_set1_ps(1.0f);
+			__m128 min1 = _mm_set1_ps(1.0f);
+
+			for(int i = 0; i < 8; i++)
+			{
+				const float *srcQuad = src + ofsTab[i];
+				min0 = _mm_min_ps(min0, _mm_load_ps(srcQuad + 0*2));
+				min1 = _mm_min_ps(min1, _mm_load_ps(srcQuad + 2*2));
 			}
 
-			// transpose
-			_MM_TRANSPOSE4_PS(min00, min01, min10, min11);
-
-			// final mins
-			__m128 min_8x8 = _mm_min_ps(_mm_min_ps(min00, min01), _mm_min_ps(min10, min11));
-			_mm_store_ps(&dstRow[xt * 4], min_8x8);
+			// merge
+			min0 = _mm_min_ps(min0, min1);
+			min0 = _mm_min_ps(min0, _mm_shuffle_ps(min0, min0, 0x4e)); // .zwxy
+			min0 = _mm_min_ps(min0, _mm_shuffle_ps(min0, min0, 0xb1)); // .yxwz
+			_mm_store_ss(&dstRow[xt], min0);
 		}
 	}
 }

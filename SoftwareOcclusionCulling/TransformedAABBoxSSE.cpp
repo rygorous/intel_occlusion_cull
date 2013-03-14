@@ -152,7 +152,7 @@ void TransformedAABBoxSSE::Gather(vFloat4 pOut[3], UINT triId, const __m128 xfor
 	}
 }
 
-extern __declspec(align(16)) float gDepthSummary[(SCREENW/8) * (SCREENH/8) * 4];
+extern float gDepthSummary[(SCREENW/8) * (SCREENH/8)];
 
 //-----------------------------------------------------------------------------------------
 // Rasterize the occludee AABB and depth test it against the CPU rasterized depth buffer
@@ -202,12 +202,12 @@ bool TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 	__m128 anyCloser = _mm_setzero_ps();
 	for(int by = rY0; by <= rY1; by++)
 	{
-		const __m128 *srcRow = (const __m128 *) (gDepthSummary + by * (SCREENW/8) * 4);
+		const float *srcRow = gDepthSummary + by * (SCREENW/8);
 
 		// if for any 4x4 block, maxZ is greater than (=in front of) summarized
 		// min Z, box might be visible.
 		for(int bx = rX0; bx <= rX1; bx++)
-			anyCloser = _mm_or_ps(anyCloser, _mm_cmpge_ps(maxZ, srcRow[bx]));
+			anyCloser = _mm_or_ps(anyCloser, _mm_cmpge_ss(maxZ, _mm_load_ss(&srcRow[bx])));
 
 		if(_mm_movemask_ps(anyCloser))
 			break;
