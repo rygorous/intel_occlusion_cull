@@ -328,4 +328,7 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
 			}// for each row
 		}// for each triangle
 	}// for each set of SIMD# triangles
+
+	// Summarize depth buffer
+	SummarizeDepthTile(tileStartX, tileStartY, tileEndX, tileEndY);
 }

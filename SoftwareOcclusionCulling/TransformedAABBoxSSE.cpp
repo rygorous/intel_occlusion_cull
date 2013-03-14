@@ -87,11 +87,10 @@ bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetup &setup, __m128 cumulati
 }
 
 //----------------------------------------------------------------
-// Trasforms the AABB vertices to screen space once every frame
+// Transforms the AABB vertices to screen space once every frame
+// Also performs a coarse depth pre-test
 //----------------------------------------------------------------
-extern float gDepthSummary[(SCREENW/8) * (SCREENH/8)];
-
-PreTestResult TransformedAABBoxSSE::TransformAndPreTestAABBox(__m128 xformedPos[], const __m128 cumulativeMatrix[4])
+PreTestResult TransformedAABBoxSSE::TransformAndPreTestAABBox(__m128 xformedPos[], const __m128 cumulativeMatrix[4], const float *pDepthSummary)
 {
 	// w ends up being garbage, but it doesn't matter - we ignore it anyway.
 	__m128 vCenter = _mm_loadu_ps(&mBBCenter.x);
@@ -166,7 +165,7 @@ PreTestResult TransformedAABBoxSSE::TransformAndPreTestAABBox(__m128 xformedPos[
 	__m128 anyCloser = _mm_setzero_ps();
 	for(int by = rY0; by <= rY1; by++)
 	{
-		const float *srcRow = gDepthSummary + by * (SCREENW/8);
+		const float *srcRow = pDepthSummary + by * (SCREENW/8);
 
 		// If for any 8x8 block, maxZ is not less than (=behind) summarized
 		// min Z, box might be visible.

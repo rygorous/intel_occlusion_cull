@@ -59,7 +59,7 @@ void AABBoxRasterizerSSEST::TransformAABBoxAndDepthTest()
 	
 		if(mpBBoxVisible[i] && !mpTransformedAABBox[i].IsTooSmall(setup, cumulativeMatrix))
 		{
-			PreTestResult res = mpTransformedAABBox[i].TransformAndPreTestAABBox(xformedPos, cumulativeMatrix);
+			PreTestResult res = mpTransformedAABBox[i].TransformAndPreTestAABBox(xformedPos, cumulativeMatrix, mpDepthSummary);
 			if(res == ePT_UNSURE)
 				mpVisible[i] = mpTransformedAABBox[i].RasterizeAndDepthTestAABBox(mpRenderTargetPixels, xformedPos);
 			else

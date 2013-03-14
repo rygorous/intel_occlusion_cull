@@ -38,7 +38,7 @@ class TransformedAABBoxSSE : public HelperSSE
 
 		bool IsTooSmall(const BoxTestSetup &setup, __m128 cumulativeMatrix[4]);
 
-		PreTestResult TransformAndPreTestAABBox(__m128 xformedPos[], const __m128 cumulativeMatrix[4]);
+		PreTestResult TransformAndPreTestAABBox(__m128 xformedPos[], const __m128 cumulativeMatrix[4], const float *pDepthSummary);
 
 		bool RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels, const __m128 xformedPos[]);
 

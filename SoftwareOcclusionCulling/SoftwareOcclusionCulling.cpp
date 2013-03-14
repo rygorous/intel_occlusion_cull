@@ -863,6 +863,7 @@ void MySample::Render(double deltaSeconds)
 		// Set the camera transforms so that the occludee abix aligned bounding boxes (AABB) can be transformed
 		mpAABB->SetViewProjMatrix(mpCamera->GetViewMatrix(), (float4x4*)mpCamera->GetProjectionMatrix());
 		mpAABB->SetCPURenderTargetPixels(mpCPURenderTargetPixels);
+		mpAABB->SetDepthSummaryBuffer(mpDBR->GetDepthSummaryBuffer());
 		// Transform the occludee AABB, rasterize and depth test to determine is occludee is visible or occluded 
 		mpAABB->TransformAABBoxAndDepthTest();
 	}

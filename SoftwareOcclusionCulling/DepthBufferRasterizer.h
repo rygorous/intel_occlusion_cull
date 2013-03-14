@@ -32,6 +32,7 @@ class DepthBufferRasterizer
 		virtual void IsVisible(CPUTCamera *pCamera) = 0;
 		virtual void SetViewProj(float4x4 *viewMatrix, float4x4 *projMatrix) = 0;
 		virtual void SetCPURenderTargetPixels(UINT *pRenderTargetPixels) = 0;
+		virtual const float *GetDepthSummaryBuffer() = 0;
 		virtual void SetOccluderSizeThreshold(float occluderSizeThreshold) = 0;
 		virtual inline void SetCamera(CPUTCamera *pCamera) = 0;
 

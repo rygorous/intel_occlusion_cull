@@ -45,6 +45,7 @@ class DepthBufferRasterizerSSE : public DepthBufferRasterizer, public HelperSSE
 
 		// start inclusive, end exclusive
 		void ClearDepthTile(int startX, int startY, int endX, int endY);
+		void SummarizeDepthTile(int startX, int startY, int endX, int endY);
 		
 		// Reset all models to be visible when frustum culling is disabled 
 		inline void ResetInsideFrustum()
@@ -59,6 +60,7 @@ class DepthBufferRasterizerSSE : public DepthBufferRasterizer, public HelperSSE
 		inline void SetViewProj(float4x4 *viewMatrix, float4x4 *projMatrix);
 		
 		inline void SetCPURenderTargetPixels(UINT *pRenderTargetPixels){mpRenderTargetPixels = pRenderTargetPixels;}
+		inline const float *GetDepthSummaryBuffer() {return mpSummaryBuffer;}
 		
 		inline void SetCamera(CPUTCamera *pCamera) {mpCamera = pCamera;}
 
@@ -125,6 +127,7 @@ class DepthBufferRasterizerSSE : public DepthBufferRasterizer, public HelperSSE
 		UINT mNumTrianglesA;
 
 		float mOccluderSizeThreshold;
+		float *mpSummaryBuffer;
 
 		double mRasterizeTime[AVG_COUNTER];
 		CPUTTimerWin mRasterizeTimer;

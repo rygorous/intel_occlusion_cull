@@ -46,7 +46,8 @@ AABBoxRasterizerSSE::AABBoxRasterizerSSE()
 	  mNumCulled(0),
 	  mNumDepthTestTasks(0),
 	  mOccludeeSizeThreshold(0.0f),
-	  mTimeCounter(0)
+	  mTimeCounter(0),
+	  mpDepthSummary(NULL)
 {
 	mViewMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
 	mProjMatrix = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
