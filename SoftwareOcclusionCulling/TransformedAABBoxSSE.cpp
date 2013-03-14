@@ -152,6 +152,8 @@ void TransformedAABBoxSSE::Gather(vFloat4 pOut[3], UINT triId, const __m128 xfor
 	}
 }
 
+extern __declspec(align(16)) float gDepthSummary[(SCREENW/8) * (SCREENH/8) * 4];
+
 //-----------------------------------------------------------------------------------------
 // Rasterize the occludee AABB and depth test it against the CPU rasterized depth buffer
 // If any of the rasterized AABB pixels passes the depth test exit early and mark the occludee
@@ -167,8 +169,53 @@ bool TransformedAABBoxSSE::RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels
 	VecS32 colOffset(0, 1, 0, 1);
 	VecS32 rowOffset(0, 0, 1, 1);
 
-	float* pDepthBuffer = (float*)pRenderTargetPixels; 
-	
+	float* pDepthBuffer = (float*)pRenderTargetPixels;
+
+	// Determine screen space bounding box
+	__m128 screenMin = pXformedPos[0];
+	__m128 screenMax = pXformedPos[0];
+	for(UINT i = 1; i < 8; i++)
+	{
+		screenMin = _mm_min_ps(screenMin, pXformedPos[i]);
+		screenMax = _mm_max_ps(screenMax, pXformedPos[i]);
+	}
+
+	screenMin = _mm_max_ps(screenMin, _mm_setr_ps(0.0f, 0.0f, 0.0f, -FLT_MAX));
+	screenMax = _mm_min_ps(screenMax, _mm_setr_ps((float) (SCREENW - 1), (float) (SCREENH - 1), 1.0f, FLT_MAX));
+
+	// Quick rejection test
+	if(_mm_movemask_ps(_mm_cmplt_ps(screenMax, screenMin)))
+		return false;
+
+	// Prepare bounds
+	__m128 minMaxXY = _mm_shuffle_ps(screenMin, screenMax, 0x44); // minX,minY,maxX,maxY
+	__m128i minMaxXYi = _mm_cvtps_epi32(minMaxXY);
+	__m128i minMaxXYis = _mm_srai_epi32(minMaxXYi, 3);
+
+	__m128 maxZ = _mm_shuffle_ps(screenMax, screenMax, 0xaa);
+
+	int rX0 = minMaxXYis.m128i_i32[0];
+	int rY0 = minMaxXYis.m128i_i32[1];
+	int rX1 = minMaxXYis.m128i_i32[2];
+	int rY1 = minMaxXYis.m128i_i32[3];
+
+	__m128 anyCloser = _mm_setzero_ps();
+	for(int by = rY0; by <= rY1; by++)
+	{
+		const __m128 *srcRow = (const __m128 *) (gDepthSummary + by * (SCREENW/8) * 4);
+
+		// if for any 4x4 block, maxZ is greater than (=in front of) summarized
+		// min Z, box might be visible.
+		for(int bx = rX0; bx <= rX1; bx++)
+			anyCloser = _mm_or_ps(anyCloser, _mm_cmpge_ps(maxZ, srcRow[bx]));
+
+		if(_mm_movemask_ps(anyCloser))
+			break;
+	}
+
+	if(!_mm_movemask_ps(anyCloser))
+		return false;
+
 	// Rasterize the AABB triangles 4 at a time
 	for(UINT i = 0; i < AABB_TRIANGLES; i += SSE)
 	{

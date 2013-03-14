@@ -261,6 +261,8 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(VOID* tas
 	sample->RasterizeBinnedTrianglesToDepthBuffer(taskId, taskCount);
 }
 
+float __declspec(align(16)) gDepthSummary[(SCREENW/8) * (SCREENH/8) * 4];
+
 //-------------------------------------------------------------------------------
 // For each tile go through all the bins and process all the triangles in it.
 // Rasterize each triangle to the CPU depth buffer. 
@@ -466,4 +468,44 @@ void DepthBufferRasterizerSSEMT::RasterizeBinnedTrianglesToDepthBuffer(UINT rawT
 			}// for each row
 		}// for each triangle
 	}// for each set of SIMD# triangles
+
+	// Summarize depth buffer
+	int x0s = tileStartX >> 3;
+	int y0s = tileStartY >> 3;
+	int x1s = tileEndX >> 3;
+	int y1s = tileEndY >> 3;
+
+	for(int yt = y0s; yt <= y1s; yt++)
+	{
+		const float *srcRow = pDepthBuffer + (yt * 8) * SCREENW;
+		float *dstRow = gDepthSummary + yt * (SCREENW/8) * 4;
+
+		for(int xt = x0s; xt <= x1s; xt++)
+		{
+			const float *src = srcRow + (xt * 8) * 2;
+
+			// mins across four 4x4 blocks
+			static const int quadOffs[4] = { 0*SCREENW + 0*2, 0*SCREENW + 2*2, 2*SCREENW + 0*2, 2*SCREENW + 2*2 };
+			__m128 min00 = _mm_set1_ps(1.0f);
+			__m128 min01 = _mm_set1_ps(1.0f);
+			__m128 min10 = _mm_set1_ps(1.0f);
+			__m128 min11 = _mm_set1_ps(1.0f);
+
+			for(int quad = 0; quad < 4; quad++)
+			{
+				const float *srcQuad = src + quadOffs[quad];
+				min00 = _mm_min_ps(min00, _mm_load_ps(srcQuad + 0*SCREENW + 0*2));
+				min01 = _mm_min_ps(min01, _mm_load_ps(srcQuad + 0*SCREENW + 4*2));
+				min10 = _mm_min_ps(min10, _mm_load_ps(srcQuad + 4*SCREENW + 0*2));
+				min11 = _mm_min_ps(min11, _mm_load_ps(srcQuad + 4*SCREENW + 4*2));
+			}
+
+			// transpose
+			_MM_TRANSPOSE4_PS(min00, min01, min10, min11);
+
+			// final mins
+			__m128 min_8x8 = _mm_min_ps(_mm_min_ps(min00, min01), _mm_min_ps(min10, min11));
+			_mm_store_ps(&dstRow[xt * 4], min_8x8);
+		}
+	}
 }
