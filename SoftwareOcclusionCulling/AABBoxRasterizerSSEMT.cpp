@@ -106,10 +106,11 @@ void AABBoxRasterizerSSEMT::TransformAABBoxAndDepthTest(UINT taskId)
 
 			if(mpBBoxVisible[i] && !mpTransformedAABBox[i].IsTooSmall(setup, cumulativeMatrix))
 			{
-				if(mpTransformedAABBox[i].TransformAABBox(xformedPos, cumulativeMatrix))
+				PreTestResult res = mpTransformedAABBox[i].TransformAndPreTestAABBox(xformedPos, cumulativeMatrix);
+				if(res == ePT_UNSURE)
 					mpVisible[i] = mpTransformedAABBox[i].RasterizeAndDepthTestAABBox(mpRenderTargetPixels, xformedPos);
 				else
-					mpVisible[i] = true;
+					mpVisible[i] = (res == ePT_VISIBLE);
 			}
 		}
 	}
