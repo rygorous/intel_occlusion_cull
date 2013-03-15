@@ -502,10 +502,9 @@ CPUTResult CPUTMeshDX11::ExtractVerticesandIndices()
 	char* vertexData = (char*)mpVertexData;
 	for(unsigned int i = 0; i < mVertexCount; i++)
 	{
-		mpRawVertices[i].position.m128_f32[0] = *((float*)vertexData + 0);
-		mpRawVertices[i].position.m128_f32[1] = *((float*)vertexData + 1);
-		mpRawVertices[i].position.m128_f32[2] = *((float*)vertexData + 2);
-		mpRawVertices[i].position.m128_f32[3] = 1.0f;
+		mpRawVertices[i].pos.x = *((float*)vertexData + 0);
+		mpRawVertices[i].pos.y = *((float*)vertexData + 1);
+		mpRawVertices[i].pos.z = *((float*)vertexData + 2);
 
 		vertexData = vertexData + vertexSizeInBytes;
 	}

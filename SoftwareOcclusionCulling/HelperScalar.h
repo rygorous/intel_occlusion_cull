@@ -40,6 +40,7 @@ class HelperScalar
 			}
 		};
 
+		float4 TransformCoords(const float3& v, const float4x4& m);
 		float4 TransformCoords(const float4& v, const float4x4& m);
 };
 

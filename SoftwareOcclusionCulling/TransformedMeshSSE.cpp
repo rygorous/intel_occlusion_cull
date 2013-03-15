@@ -51,17 +51,27 @@ void TransformedMeshSSE::TransformVertices(__m128 *cumulativeMatrix,
 										   UINT start, 
 										   UINT end)
 {
-	UINT i;
-	for(i = start; i <= end; i++)
+	__m128 row0 = cumulativeMatrix[0];
+	__m128 row1 = cumulativeMatrix[1];
+	__m128 row2 = cumulativeMatrix[2];
+	__m128 row3 = cumulativeMatrix[3];
+	Vertex * const inPos = mpVertices;
+	__m128 * __restrict outPos = mpXformedPos;
+
+	for(UINT i = start; i <= end; i++)
 	{
-		__m128 xform = TransformCoords(&mpVertices[i].position, cumulativeMatrix);
+		__m128 xform = row3;
+		xform += row0 * _mm_load1_ps(&inPos[i].pos.x);
+		xform += row1 * _mm_load1_ps(&inPos[i].pos.y);
+		xform += row2 * _mm_load1_ps(&inPos[i].pos.z);
+
 		__m128 vertZ = _mm_shuffle_ps(xform, xform, 0xaa);
 		__m128 vertW = _mm_shuffle_ps(xform, xform, 0xff);
 		__m128 projected = _mm_div_ps(xform, vertW);
 
 		// set to all-0 if near-clipped
 		__m128 mNoNearClip = _mm_cmple_ps(vertZ, vertW);
-		mpXformedPos[i] = _mm_and_ps(projected, mNoNearClip);
+		outPos[i] = _mm_and_ps(projected, mNoNearClip);
 	}
 }
 

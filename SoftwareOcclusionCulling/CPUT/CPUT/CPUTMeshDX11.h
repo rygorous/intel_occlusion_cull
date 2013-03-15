@@ -32,17 +32,7 @@ class CPUTModelDX11;
 
 struct Vertex
 {
-	union
-	{
-		struct
-		{
-			float4 pos;
-		};
-		struct
-		{
-			__m128 position;
-		};
-	};
+	float3 pos;
 };
 
 //-----------------------------------------------------------------------------
