@@ -37,11 +37,11 @@ TransformedMeshSSE::~TransformedMeshSSE()
 
 void TransformedMeshSSE::Initialize(CPUTMeshDX11* pMesh)
 {
-	mNumVertices = pMesh->GetVertexCount();
+	mNumVertices = pMesh->GetDepthVertexCount();
 	mNumIndices  = pMesh->GetIndexCount();
 	mNumTriangles = pMesh->GetTriangleCount();
-	mpVertices   = pMesh->GetVertices();
-	mpIndices    = pMesh->GetIndices();
+	mpVertices   = pMesh->GetDepthVertices();
+	mpIndices    = pMesh->GetDepthIndices();
 }
 
 //-------------------------------------------------------------------

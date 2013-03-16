@@ -58,6 +58,7 @@ class CPUTMeshDX11 : public CPUTMesh
 	// CC added 
 	void					 *mpVertexData;
 	Vertex					 *mpRawVertices;
+	unsigned int			  mRawVertexCount;
 	// CC added end
 
     UINT                      mIndexCount;
@@ -97,8 +98,9 @@ public:
     UINT                      GetIndexCount()  { return mIndexCount; }
 
 	// CC added
-	unsigned int			 *GetIndices() { return mpRawIndices; }
-	Vertex					 *GetVertices() { return mpRawVertices; }
+	unsigned int			  GetDepthVertexCount() { return mRawVertexCount; }
+	unsigned int			 *GetDepthIndices() { return mpRawIndices; }
+	Vertex					 *GetDepthVertices() { return mpRawVertices; }
 	CPUTResult ExtractVerticesandIndices();
 
 	static void ResetDrawCallCount(){mDrawCallCount = 0;}

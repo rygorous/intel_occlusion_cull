@@ -485,7 +485,6 @@ CPUTResult CPUTMeshDX11::GetByteSizeFromFormat(const DXGI_FORMAT& dxgiFormat, in
 	return result;
 }
 
-
 CPUTResult CPUTMeshDX11::ExtractVerticesandIndices()
 {
 	CPUTResult result = CPUT_SUCCESS;
@@ -497,7 +496,8 @@ CPUTResult CPUTMeshDX11::ExtractVerticesandIndices()
 		return result;
 	}
 	vertexSizeInBytes += (mpLayoutDescription + mNumberOfInputLayoutElements -1)->AlignedByteOffset;
-	
+
+	mRawVertexCount = mVertexCount;
 	mpRawVertices = (Vertex*)_aligned_malloc(sizeof(Vertex) * mVertexCount, 32);//new Vertex[m_VertexCount];
 	char* vertexData = (char*)mpVertexData;
 	for(unsigned int i = 0; i < mVertexCount; i++)
