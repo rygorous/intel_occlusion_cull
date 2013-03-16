@@ -497,23 +497,66 @@ CPUTResult CPUTMeshDX11::ExtractVerticesandIndices()
 	}
 	vertexSizeInBytes += (mpLayoutDescription + mNumberOfInputLayoutElements -1)->AlignedByteOffset;
 
-	mRawVertexCount = mVertexCount;
-	mpRawVertices = (Vertex*)_aligned_malloc(sizeof(Vertex) * mVertexCount, 32);//new Vertex[m_VertexCount];
-	char* vertexData = (char*)mpVertexData;
+	const unsigned int* indexData = (const unsigned int *)mpIndexData;
+	const char* vertexData = (const char *)mpVertexData;
+
+	// Determine set of vertices with unique positions
+	auto vertexLess = [=](UINT indA, UINT indB) -> bool {
+		return memcmp(vertexData + indA * vertexSizeInBytes, vertexData + indB * vertexSizeInBytes, 3 * sizeof(float)) < 0;
+	};
+
+	// Step 1: build an index list, sort by vertex position
+	// -> vertices with same position will cluster together
+	std::vector<unsigned int> sortedInds;
+	sortedInds.reserve(mVertexCount);
+	for(unsigned int i = 0; i < mVertexCount; i++)
+		sortedInds.push_back(i);
+	std::sort(sortedInds.begin(), sortedInds.end(), vertexLess);
+
+	// Step 2: determine unique verts and build reverse map
+	std::vector<unsigned int> indToUnique(mVertexCount);
+	indToUnique.reserve(mVertexCount);
+
+	unsigned int nUniqueVerts = 0;
 	for(unsigned int i = 0; i < mVertexCount; i++)
 	{
-		mpRawVertices[i].pos.x = *((float*)vertexData + 0);
-		mpRawVertices[i].pos.y = *((float*)vertexData + 1);
-		mpRawVertices[i].pos.z = *((float*)vertexData + 2);
-
-		vertexData = vertexData + vertexSizeInBytes;
+		if(i == 0 || vertexLess(sortedInds[i-1], sortedInds[i]))
+			nUniqueVerts++;
+		indToUnique[sortedInds[i]] = nUniqueVerts - 1;
 	}
 
+	// Step 3: we now have a set of unique vertex positions, but they're
+	// sorted by position; we want our vertex buffer to roughly match index
+	// order for cache efficiency later, so shuffle things around one more
+	// time so we reference vertices in the order they appear.
+	mRawVertexCount = nUniqueVerts;
+	mpRawVertices = (Vertex*)_aligned_malloc(sizeof(Vertex) * mRawVertexCount, 32);
 	mpRawIndices = new unsigned int[mIndexCount];
-	char* indexData = (char*)mpIndexData;
-	for(unsigned int i = 0; i < mIndexCount; i++, indexData += mIndexElementByteSize)
+
+	std::vector<unsigned int> uniqueToVB(nUniqueVerts, ~0u);
+	assert(mIndexElementByteSize == 4);
+
+	unsigned int vertCounter = 0;
+
+	for(unsigned int i = 0; i < mIndexCount; i++)
 	{
-		mpRawIndices[i] = *((unsigned int*)indexData);
+		unsigned int inInd = indexData[i];
+		unsigned int uniq = indToUnique[inInd];
+		unsigned int vb = uniqueToVB[uniq];
+
+		if(vb == ~0u) // we haven't referenced this vert yet, add it to the VB!
+		{
+			vb = uniqueToVB[uniq] = vertCounter++;
+
+			const float *srcVert = (const float *) (vertexData + inInd * vertexSizeInBytes);
+			mpRawVertices[vb].pos.x = srcVert[0];
+			mpRawVertices[vb].pos.y = srcVert[1];
+			mpRawVertices[vb].pos.z = srcVert[2];
+		}
+
+		mpRawIndices[i] = vb;
 	}
+
+	assert(vertCounter <= nUniqueVerts); // could be < if there's unreferenced verts.
 	return result;	
 }
