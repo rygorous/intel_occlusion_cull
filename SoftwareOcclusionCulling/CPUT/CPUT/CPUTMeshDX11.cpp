@@ -498,7 +498,7 @@ CPUTResult CPUTMeshDX11::ExtractVerticesandIndices()
 	}
 	vertexSizeInBytes += (mpLayoutDescription + mNumberOfInputLayoutElements -1)->AlignedByteOffset;
 	
-	mpRawVertices = (Vertex*)_aligned_malloc(sizeof(__m128) * mVertexCount, 32);//new Vertex[m_VertexCount];
+	mpRawVertices = (Vertex*)_aligned_malloc(sizeof(Vertex) * mVertexCount, 32);//new Vertex[m_VertexCount];
 	char* vertexData = (char*)mpVertexData;
 	for(unsigned int i = 0; i < mVertexCount; i++)
 	{
