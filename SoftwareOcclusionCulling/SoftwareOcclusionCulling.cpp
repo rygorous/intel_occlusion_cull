@@ -1194,6 +1194,7 @@ void MySample::Render(double deltaSeconds)
 	
 		
 		mpAABB->SetCPURenderTargetPixels(mpCPURenderTargetPixels, mCurrId);
+		mpAABB->SetDepthSummaryBuffer(mpDBR->GetDepthSummaryBuffer(mCurrId), mCurrId);
 		// Transform the occludee AABB, rasterize and depth test to determine is occludee is visible or occluded 
 		mpAABB->TransformAABBoxAndDepthTest(&mCameraCopy[mCurrId], mCurrId);		
 

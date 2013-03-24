@@ -52,6 +52,7 @@ class AABBoxRasterizerScalar : public AABBoxRasterizer
 		{
 			mpRenderTargetPixels[idx] = pRenderTargetPixels;
 		}
+		inline void SetDepthSummaryBuffer(const float *pSummaryBuffer, UINT idx) {}
 		inline void SetDepthTestTasks(UINT numTasks){mNumDepthTestTasks = numTasks;}
 		inline void SetOccludeeSizeThreshold(float occludeeSizeThreshold){mOccludeeSizeThreshold = occludeeSizeThreshold;}
 		inline void SetCamera(CPUTCamera *pCamera, UINT idx) {mpCamera[idx] = pCamera;}	

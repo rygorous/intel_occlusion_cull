@@ -48,6 +48,11 @@ class DepthBufferRasterizerScalar : public DepthBufferRasterizer, public HelperS
 		{
 			mpRenderTargetPixels[idx] = pRenderTargetPixels;
 		}
+
+		inline const float *GetDepthSummaryBuffer(UINT idx)
+		{
+			return NULL;
+		}
 		
 		inline void SetOccluderSizeThreshold(float occluderSizeThreshold) {mOccluderSizeThreshold = occluderSizeThreshold;}
 

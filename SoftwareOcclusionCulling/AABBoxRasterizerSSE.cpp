@@ -57,6 +57,8 @@ AABBoxRasterizerSSE::AABBoxRasterizerSSE()
 
 	mpRenderTargetPixels[0] = NULL;
 	mpRenderTargetPixels[1] = NULL;
+	mpDepthSummary[0] = NULL;
+	mpDepthSummary[1] = NULL;
 	
 	mNumCulled[0] = mNumCulled[1] = 0;
 	for(UINT i = 0; i < AVG_COUNTER; i++)

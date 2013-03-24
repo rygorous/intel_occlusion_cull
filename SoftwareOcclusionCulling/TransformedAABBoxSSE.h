@@ -23,12 +23,19 @@
 #include "Constants.h"
 #include "HelperSSE.h"
 
+enum PreTestResult
+{
+	ePT_INVISIBLE,
+	ePT_VISIBLE,
+	ePT_UNSURE,
+};
+
 class TransformedAABBoxSSE : public HelperSSE
 {
 	public:
 		void CreateAABBVertexIndexList(CPUTModelDX11 *pModel);
 		bool IsInsideViewFrustum(CPUTCamera *pCamera);
-		bool TransformAABBox(__m128 xformedPos[], const __m128 cumulativeMatrix[4]);
+		PreTestResult TransformAndPreTestAABBox(__m128 xformedPos[], const __m128 cumulativeMatrix[4], const float *pDepthSummary);
 		bool RasterizeAndDepthTestAABBox(UINT *pRenderTargetPixels, const __m128 pXformedPos[], UINT idx);
 
 		bool IsTooSmall(const BoxTestSetupSSE &setup, __m128 cumulativeMatrix[4]);

@@ -36,6 +36,8 @@ DepthBufferRasterizerSSE::DepthBufferRasterizerSSE()
 	mpProjMatrix[1] = (__m128*)_aligned_malloc(sizeof(float) * 4 * 4, 16);
 	mpRenderTargetPixels[0] = NULL;
 	mpRenderTargetPixels[1] = NULL;
+	mpSummaryBuffer[0] = (float*)_aligned_malloc(sizeof(float) * (SCREENW/8) * (SCREENH/8), 64);
+	mpSummaryBuffer[1] = (float*)_aligned_malloc(sizeof(float) * (SCREENW/8) * (SCREENH/8), 64);
 
 	mNumRasterized[0] = mNumRasterized[1] = NULL;
 
@@ -66,6 +68,8 @@ DepthBufferRasterizerSSE::~DepthBufferRasterizerSSE()
 	_aligned_free(mpViewMatrix[1]);
 	_aligned_free(mpProjMatrix[0]);
 	_aligned_free(mpProjMatrix[1]);
+	_aligned_free(mpSummaryBuffer[0]);
+	_aligned_free(mpSummaryBuffer[1]);
 }
 
 //--------------------------------------------------------------------
@@ -159,6 +163,55 @@ void DepthBufferRasterizerSSE::ClearDepthTile(int startX, int startY, int endX, 
 	{
 		int rowIdx = r * SCREENW + 2 * startX;
 		memset(&pDepthBuffer[rowIdx], 0, sizeof(float) * 2 * width);
+	}
+}
+
+//--------------------------------------------------------------------
+// Summarize the depth buffer for a tile
+//--------------------------------------------------------------------
+void DepthBufferRasterizerSSE::SummarizeDepthTile(int startX, int startY, int endX, int endY, UINT idx)
+{
+	assert(startX % 8 == 0 && startY % 8 == 0);
+	assert(endX % 8 == 0 && endY % 8 == 0);
+
+	const float* pDepthBuffer = (const float*)mpRenderTargetPixels[idx];
+	int x0s = startX / 8;
+	int y0s = startY / 8;
+	int x1s = endX / 8;
+	int y1s = endY / 8;
+
+	for(int yt = y0s; yt < y1s; yt++)
+	{
+		const float *srcRow = pDepthBuffer + (yt * 8) * SCREENW;
+		float *dstRow = mpSummaryBuffer[idx] + yt * (SCREENW/8);
+
+		for(int xt = x0s; xt <= x1s; xt++)
+		{
+			const float *src = srcRow + (xt * 8) * 2;
+
+			static const int ofsTab[8] = 
+			{
+				0*SCREENW + 0*2, 0*SCREENW + 4*2,
+				2*SCREENW + 0*2, 2*SCREENW + 4*2,
+				4*SCREENW + 0*2, 4*SCREENW + 4*2,
+				6*SCREENW + 0*2, 6*SCREENW + 4*2
+			};
+			__m128 min0 = _mm_set1_ps(1.0f);
+			__m128 min1 = _mm_set1_ps(1.0f);
+
+			for(int i = 0; i < 8; i++)
+			{
+				const float *srcQuad = src + ofsTab[i];
+				min0 = _mm_min_ps(min0, _mm_load_ps(srcQuad + 0*2));
+				min1 = _mm_min_ps(min1, _mm_load_ps(srcQuad + 2*2));
+			}
+
+			// merge
+			min0 = _mm_min_ps(min0, min1);
+			min0 = _mm_min_ps(min0, _mm_shuffle_ps(min0, min0, 0x4e)); // .zwxy
+			min0 = _mm_min_ps(min0, _mm_shuffle_ps(min0, min0, 0xb1)); // .yxwz
+			_mm_store_ss(&dstRow[xt], min0);
+		}
 	}
 }
 

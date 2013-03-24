@@ -97,7 +97,7 @@ bool TransformedAABBoxSSE::IsTooSmall(const BoxTestSetupSSE &setup, __m128 cumul
 //----------------------------------------------------------------
 // Trasforms the AABB vertices to screen space once every frame
 //----------------------------------------------------------------
-bool TransformedAABBoxSSE::TransformAABBox(__m128 xformedPos[], const __m128 cumulativeMatrix[4])
+PreTestResult TransformedAABBoxSSE::TransformAndPreTestAABBox(__m128 xformedPos[], const __m128 cumulativeMatrix[4], const float *pDepthSummary)
 {
 	// w ends up being garbage, but it doesn't matter - we ignore it anyway.
 	__m128 vCenter = _mm_loadu_ps(&mBBCenter.x);
@@ -116,6 +116,8 @@ bool TransformedAABBoxSSE::TransformAABBox(__m128 xformedPos[], const __m128 cum
 	zRow[1] = _mm_shuffle_ps(vMax, vMax, 0xaa) * cumulativeMatrix[2];
 
 	__m128 zAllIn = _mm_castsi128_ps(_mm_set1_epi32(~0));
+	__m128 screenMin = _mm_set1_ps(FLT_MAX);
+	__m128 screenMax = _mm_set1_ps(-FLT_MAX);
 
 	for(UINT i = 0; i < AABB_VERTICES; i++)
 	{
@@ -132,11 +134,58 @@ bool TransformedAABBoxSSE::TransformAABBox(__m128 xformedPos[], const __m128 cum
 		zAllIn = _mm_and_ps(zAllIn, zIn);
 
 		// project
-		xformedPos[i] = _mm_div_ps(vert, vertW);
+		__m128 projected = _mm_div_ps(vert, vertW);
+		xformedPos[i] = projected;
+
+		// update bounds
+		screenMin = _mm_min_ps(screenMin, projected);
+		screenMax = _mm_max_ps(screenMax, projected);
 	}
 
-	// return true if and only if none of the verts are z-clipped
-	return _mm_movemask_ps(zAllIn) == 0xf;
+	// if any of the verts are z-clipped, we (conservatively) say the box is in
+	if(_mm_movemask_ps(zAllIn) != 0xf)
+		return ePT_VISIBLE;
+
+	// Clip against screen bounds
+	screenMin = _mm_max_ps(screenMin, _mm_setr_ps(0.0f, 0.0f, 0.0f, -FLT_MAX));
+	screenMax = _mm_min_ps(screenMax, _mm_setr_ps((float) (SCREENW - 1), (float) (SCREENH - 1), 1.0f, FLT_MAX));
+
+	// Quick rejection test
+	if(_mm_movemask_ps(_mm_cmplt_ps(screenMax, screenMin)))
+		return ePT_INVISIBLE;
+
+	// Prepare integer bounds
+	__m128 minMaxXY = _mm_shuffle_ps(screenMin, screenMax, 0x44); // minX,minY,maxX,maxY
+	__m128i minMaxXYi = _mm_cvtps_epi32(minMaxXY);
+	__m128i minMaxXYis = _mm_srai_epi32(minMaxXYi, 3);
+
+	__m128 maxZ = _mm_shuffle_ps(screenMax, screenMax, 0xaa);
+
+	// Traverse all 8x8 blocks covered by 2d screen-space BBox;
+	// if we know for sure that this box is behind the geometry we know is there,
+	// we can stop.
+	int rX0 = minMaxXYis.m128i_i32[0];
+	int rY0 = minMaxXYis.m128i_i32[1];
+	int rX1 = minMaxXYis.m128i_i32[2];
+	int rY1 = minMaxXYis.m128i_i32[3];
+
+	__m128 anyCloser = _mm_setzero_ps();
+	for(int by = rY0; by <= rY1; by++)
+	{
+		const float *srcRow = pDepthSummary + by * (SCREENW/8);
+
+		// If for any 8x8 block, maxZ is not less than (=behind) summarized
+		// min Z, box might be visible.
+		for(int bx = rX0; bx <= rX1; bx++)
+			anyCloser = _mm_or_ps(anyCloser, _mm_cmpnlt_ss(maxZ, _mm_load_ss(&srcRow[bx])));
+
+		if(_mm_movemask_ps(anyCloser))
+			return ePT_UNSURE; // okay, box might be in
+	}
+
+	// If we get here, we know for sure that the box is fully behind the stuff in the
+	// depth buffer.
+	return ePT_INVISIBLE;
 }
 
 void TransformedAABBoxSSE::Gather(vFloat4 pOut[3], UINT triId, const __m128 xformedPos[], UINT idx)
