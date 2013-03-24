@@ -153,8 +153,8 @@ CPUTResult CPUTMeshDX11::CreateNativeResources(
 	memcpy(mpVertexData, pVertexData, pVertexDataInfo[0].mElementCount * mVertexStride);
 	// CC added ends
 
-
-    // create the buffer for the shader resource view
+/* // D3D11_RESOURCE_MISC_BUFFER_STRUCTURED not required by app
+// create the buffer for the shader resource view
     D3D11_BUFFER_DESC desc;
     ZeroMemory( &desc, sizeof(desc) );
     desc.Usage = D3D11_USAGE_DEFAULT;
@@ -184,6 +184,7 @@ CPUTResult CPUTMeshDX11::CreateNativeResources(
     cString name = _L("@VertexBuffer") + ptoc(pModel) + itoc(meshIdx);
     mpVertexBufferForSRV = new CPUTBufferDX11( name, mpVertexBufferForSRVDX, mpVertexView );
     CPUTAssetLibrary::GetAssetLibrary()->AddBuffer( name, mpVertexBufferForSRV );
+*/ // D3D11_RESOURCE_MISC_BUFFER_STRUCTURED not required by app
 
     // build the layout object
     int currentByteOffset=0;

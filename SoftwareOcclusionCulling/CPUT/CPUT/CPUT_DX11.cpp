@@ -319,6 +319,7 @@ CPUTResult CPUT_DX11::CreateDXContext(CPUTContextCreation ContextParams )
 //-----------------------------------------------------------------------------
 bool CPUT_DX11::TestContextForRequiredFeatures()
 {
+/* // D3D11_RESOURCE_MISC_BUFFER_STRUCTURED not required by app
     // D3D11_RESOURCE_MISC_BUFFER_STRUCTURED check
     // attempt to create a 
     // create the buffer for the shader resource view
@@ -346,6 +347,7 @@ bool CPUT_DX11::TestContextForRequiredFeatures()
         // failed the feature test
         return false;
     }
+ */ // D3D11_RESOURCE_MISC_BUFFER_STRUCTURED not required by app
 
     // add other required features here
 
