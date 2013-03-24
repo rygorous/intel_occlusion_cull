@@ -27,11 +27,13 @@ public:
     float3 mpPosition[8];
     float3 mpNormal[6];
 
+	float *mPlanes;
+
     UINT mNumFrustumVisibleModels;
     UINT mNumFrustumCulledModels;
 
-    CPUTFrustum(){}
-    ~CPUTFrustum(){}
+    CPUTFrustum();
+    ~CPUTFrustum();
 
     void InitializeFrustum
     (

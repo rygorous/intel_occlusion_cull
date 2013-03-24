@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -34,7 +34,7 @@ CPUTHullShaderDX11 *CPUTHullShaderDX11::CreateHullShader(
     // Create the Hull shader
     // TODO: Move to Hull shader class
     HRESULT hr = pD3dDevice->CreateHullShader( pCompiledBlob->GetBufferPointer(), pCompiledBlob->GetBufferSize(), NULL, &pNewHullShader );
-    ASSERT( SUCCEEDED(result), _L("Error compiling Hull shader:\n\n") );
+    ASSERT( SUCCEEDED(hr), _L("Error creating Hull shader:\n\n") );
     // cString DebugName = _L("CPUTAssetLibraryDX11::GetHullShader ")+name;
     // CPUTSetDebugName(pNewHullShader, DebugName);
 
@@ -67,7 +67,7 @@ CPUTHullShaderDX11 *CPUTHullShaderDX11::CreateHullShaderFromMemory(
     // Create the Hull shader
     // TODO: Move to Hull shader class
     HRESULT hr = pD3dDevice->CreateHullShader( pCompiledBlob->GetBufferPointer(), pCompiledBlob->GetBufferSize(), NULL, &pNewHullShader );
-    ASSERT( SUCCEEDED(result), _L("Error compiling Hull shader:\n\n") );
+    ASSERT( SUCCEEDED(hr), _L("Error creating Hull shader:\n\n") );
     // cString DebugName = _L("CPUTAssetLibraryDX11::GetHullShader ")+name;
     // CPUTSetDebugName(pNewHullShader, DebugName);
 

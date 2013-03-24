@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -16,8 +16,6 @@
 #include "CPUTFont.h"
 #ifdef CPUT_FOR_DX11
 #include "CPUTFontDX11.h"
-#elif defined(CPUT_FOR_OGLES)
-#include "CPUTFontOGLES.h"
 #else    
 #error You must supply a target graphics API (ex: #define CPUT_FOR_DX11), or implement the target API for this file.
 #endif
@@ -41,8 +39,6 @@ CPUTFont *CPUTFont::CreateFont( cString FontName, cString AbsolutePathAndFilenam
     // TODO: be sure to support the case where we want to support only one of them
 #ifdef CPUT_FOR_DX11
     return CPUTFontDX11::CreateFont( FontName, AbsolutePathAndFilename );
-#elif defined(CPUT_FOR_OGLES)
-    return CPUTFontOGLES::CreateFont( FontName, AbsolutePathAndFilename );
 #else    
 #error You must supply a target graphics API (ex: #define CPUT_FOR_DX11), or implement the target API for this file.
 #endif

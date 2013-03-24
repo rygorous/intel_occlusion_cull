@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -282,7 +282,7 @@ CPUTResult CPUTOSServices::ReadFileContents(const cString &fileName, UINT *pSize
     {
         // get file size
         fseek(pFile, 0, SEEK_END);
-	    *pSizeInBytes = ftell(pFile);
+        *pSizeInBytes = ftell(pFile);
         fseek (pFile, 0, SEEK_SET);
 
         // allocate buffer
@@ -339,7 +339,7 @@ CPUTResult CPUTOSServices::OpenFileDialog(const cString &filter, cString *pfileN
 //-----------------------------------------------------------------------------
 CPUTResult CPUTOSServices::OpenMessageBox(cString title, cString text)
 {
-	::MessageBox(NULL, text.c_str(), title.c_str(), MB_OK);
+    ::MessageBox(NULL, text.c_str(), title.c_str(), MB_OK);
 
     return CPUT_SUCCESS;
 }

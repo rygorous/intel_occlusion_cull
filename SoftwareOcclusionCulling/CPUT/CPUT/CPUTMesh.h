@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -173,7 +173,7 @@ class CPUTMesh : public CPUTRefCount
 {
 protected:
     eCPUT_MESH_TOPOLOGY mMeshTopology;
-	UINT mInstanceCount;
+    UINT mInstanceCount;
 
 public:
     CPUTMesh() : mInstanceCount(1) {}
@@ -199,8 +199,8 @@ public:
 
     virtual void Draw(CPUTRenderParameters &renderParams, CPUTModel *pModel) = 0;
     virtual void DrawShadow(CPUTRenderParameters &renderParams, CPUTModel *pModel) = 0;
-	void IncrementInstanceCount() { mInstanceCount++; }
-	void DecrementInstanceCount() { mInstanceCount--; }
+    void IncrementInstanceCount() { mInstanceCount++; }
+    void DecrementInstanceCount() { mInstanceCount--; }
 
 	// CC added
 	virtual CPUTResult ExtractVerticesandIndices() = 0;

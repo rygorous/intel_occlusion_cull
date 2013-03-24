@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -24,21 +24,38 @@ class DepthBufferRasterizerSSEMT : public DepthBufferRasterizerSSE
 		DepthBufferRasterizerSSEMT();
 		~DepthBufferRasterizerSSEMT();
 
-		void IsVisible(CPUTCamera *pCamera);
-		void TransformModelsAndRasterizeToDepthBuffer();
+		struct PerTaskData
+		{
+			UINT idx;
+			DepthBufferRasterizerSSEMT *pDBR; 
+		};
+
+		PerTaskData mTaskData[2];
+		void TransformModelsAndRasterizeToDepthBuffer(CPUTCamera *pCamera, UINT idx);
+		void ComputeR2DBTime(UINT idx);
 
 	private:
-		static void IsVisible(VOID* taskData, INT context, UINT taskId, UINT taskCount);
-		void IsVisible(UINT taskId, UINT taskCount);
+		static void InsideViewFrustum(VOID* taskData, INT context, UINT taskId, UINT taskCount);
+		void InsideViewFrustum(UINT taskId, UINT taskCount, UINT idx);
+
+		static void TooSmall(VOID* taskData, INT context, UINT taskId, UINT taskCount);
+		void TooSmall(UINT taskId, UINT taskCount, UINT idx);
+
+		static void ActiveModels(VOID* taskData, INT context, UINT taskId, UINT taskCount);
+		void ActiveModels(UINT taskId, UINT idx);
 
 		static void TransformMeshes(VOID* taskData, INT context, UINT taskId, UINT taskCount);
-		void TransformMeshes(UINT taskId, UINT taskCount);
+		void TransformMeshes(UINT taskId, UINT taskCount, UINT idx);
 
 		static void BinTransformedMeshes(VOID* taskData, INT context, UINT taskId, UINT taskCount);
-		void BinTransformedMeshes(UINT taskId, UINT taskCount); 
+		void BinTransformedMeshes(UINT taskId, UINT taskCount, UINT idx);
+
+		static void SortBins(VOID* taskData, INT context, UINT taskId, UINT taskCount);
 
 		static void RasterizeBinnedTrianglesToDepthBuffer(VOID* taskData, INT context, UINT taskId, UINT taskCount);
-		void RasterizeBinnedTrianglesToDepthBuffer(UINT taskId, UINT taskCount);
+		void RasterizeBinnedTrianglesToDepthBuffer(UINT taskId, UINT idx);
+
+		UINT mTileSequence[2][NUM_TILES];
 };
 
 #endif  //DEPTHBUFFERRASTERIZERSSEMT_H

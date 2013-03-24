@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -95,14 +95,14 @@ public:
         mpShaderResourceView = pShaderResourceView;
         mpShaderResourceView->AddRef();
     }
-	void SetUnorderedAccessView(ID3D11UnorderedAccessView *pUnorderedAccessView)
+    void SetUnorderedAccessView(ID3D11UnorderedAccessView *pUnorderedAccessView)
     {
         // release any resource view we might already be pointing too
         SAFE_RELEASE( mpUnorderedAccessView );
         mpUnorderedAccessView = pUnorderedAccessView;
         mpUnorderedAccessView->AddRef();
     }
-	void SetBufferAndViews(ID3D11Buffer *pBuffer, ID3D11ShaderResourceView *pShaderResourceView, ID3D11UnorderedAccessView *pUnorderedAccessView )
+    void SetBufferAndViews(ID3D11Buffer *pBuffer, ID3D11ShaderResourceView *pShaderResourceView, ID3D11UnorderedAccessView *pUnorderedAccessView )
     {
         SAFE_RELEASE(mpBuffer);
         mpBuffer = pBuffer;
@@ -121,7 +121,7 @@ public:
     ID3D11Buffer *GetNativeBuffer() { return mpBuffer; }
     D3D11_MAPPED_SUBRESOURCE  MapBuffer(   CPUTRenderParameters &params, eCPUTMapType type, bool wait=true );
     void                      UnmapBuffer( CPUTRenderParameters &params );
-	void ReleaseBuffer()
+    void ReleaseBuffer()
     {
         SAFE_RELEASE(mpShaderResourceView);
         SAFE_RELEASE(mpUnorderedAccessView);

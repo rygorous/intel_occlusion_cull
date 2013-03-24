@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -78,13 +78,17 @@ HRESULT CPUTRenderTargetColor::CreateRenderTarget(
     CPUTOSServices   *pServices     = CPUTOSServices::GetOSServices();
 
     // Create the color texture
+    int createFlags = createUAV 
+        ? D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS
+        : D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+
     mColorDesc = CD3D11_TEXTURE2D_DESC(
         colorFormat,
         width,
         height,
         1, // Array Size
         1, // MIP Levels
-        D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS,
+        createFlags,
         D3D11_USAGE_DEFAULT,
         0,
         mMultiSampleCount, 0
@@ -102,7 +106,7 @@ HRESULT CPUTRenderTargetColor::CreateRenderTarget(
         srDesc.Texture2D.MipLevels = 1;
         result = pD3dDevice->CreateShaderResourceView( mpColorTextureDXMSAA, &srDesc, &mpColorSRVMSAA );
         ASSERT( SUCCEEDED(result), _L("Failed creating MSAA render target shader resource view") );
-		CPUTSetDebugName( mpColorSRVMSAA, textureName + _L(" ColorMSAA") );
+        CPUTSetDebugName( mpColorSRVMSAA, textureName + _L(" ColorMSAA") );
 
         if( !recreate )
         {
@@ -118,7 +122,6 @@ HRESULT CPUTRenderTargetColor::CreateRenderTarget(
                 finalName = msaaName;
             }else
             {
-                CPUTOSServices *pServices = CPUTOSServices::GetOSServices();
                 pServices->ResolveAbsolutePathAndFilename( (pAssetLibrary->GetTextureDirectory() + msaaName), &finalName);
             }
             pAssetLibrary->AddTexture( finalName, mpColorTextureMSAA );
@@ -136,7 +139,7 @@ HRESULT CPUTRenderTargetColor::CreateRenderTarget(
     srDesc.Texture2D.MipLevels = 1;
     result = pD3dDevice->CreateShaderResourceView( mpColorTextureDX, &srDesc, &mpColorSRV );
     ASSERT( SUCCEEDED(result), _L("Failed creating render target shader resource view") );
-	CPUTSetDebugName( mpColorSRV, textureName + _L(" Color") );
+    CPUTSetDebugName( mpColorSRV, textureName + _L(" Color") );
 
     mHasUav = createUAV; // Remember, so we know to recreate it (or not) on RecreateRenderTarget()
     if( createUAV )
@@ -149,7 +152,7 @@ HRESULT CPUTRenderTargetColor::CreateRenderTarget(
         uavDesc.Texture2D.MipSlice = 0;
         result = pD3dDevice->CreateUnorderedAccessView( mpColorTextureDX, &uavDesc, &mpColorUAV );
         ASSERT( SUCCEEDED(result), _L("Failed creating render target buffer shader resource view") );
-	    CPUTSetDebugName( mpColorUAV, textureName + _L(" Color Buffer") );
+        CPUTSetDebugName( mpColorUAV, textureName + _L(" Color Buffer") );
     }
     if( !recreate )
     {
@@ -165,7 +168,7 @@ HRESULT CPUTRenderTargetColor::CreateRenderTarget(
     ID3D11Texture2D *pColorTexture = (mMultiSampleCount>1) ? mpColorTextureDXMSAA : mpColorTextureDX;
     result = pD3dDevice->CreateRenderTargetView( pColorTexture, NULL, &mpColorRenderTargetView );
     ASSERT( SUCCEEDED(result), _L("Failed creating render target view") );
-	CPUTSetDebugName( mpColorRenderTargetView, mName );
+    CPUTSetDebugName( mpColorRenderTargetView, mName );
 
     return S_OK;
 }
@@ -245,7 +248,7 @@ HRESULT CPUTRenderTargetDepth::CreateRenderTarget(
     D3D11_DEPTH_STENCIL_VIEW_DESC dsvd = { depthFormat, dsvDimension, 0 };
     result = pD3dDevice->CreateDepthStencilView( mpDepthTextureDX, &dsvd, &mpDepthStencilView );
     ASSERT( SUCCEEDED(result), _L("Failed creating depth stencil view") );
-	CPUTSetDebugName( mpDepthStencilView, mName );
+    CPUTSetDebugName( mpDepthStencilView, mName );
 
     if( supportsResourceView )
     {
@@ -262,7 +265,7 @@ HRESULT CPUTRenderTargetDepth::CreateRenderTarget(
 
         result = pD3dDevice->CreateShaderResourceView( mpDepthTextureDX, &depthRsDesc, &mpDepthResourceView );
         ASSERT( SUCCEEDED(result), _L("Failed creating render target shader resource view") );
-		CPUTSetDebugName( mpDepthResourceView, textureName + _L(" Depth") );
+        CPUTSetDebugName( mpDepthResourceView, textureName + _L(" Depth") );
 
         if( !recreate )
         {
@@ -322,10 +325,6 @@ void CPUTRenderTargetColor::SetRenderTarget(
     // TODO: support multiple render target views (i.e., MRT)
     ID3D11DeviceContext *pContext = ((CPUTRenderParametersDX*)&renderParams)->mpContext;
 
-    // Make sure this render target isn't currently bound as a texture.
-    static ID3D11ShaderResourceView *pSRV[16] = {0};
-    pContext->PSSetShaderResources( 0, 16, pSRV );
-
     // Clear the shader resources to avoid a hazard warning
     ID3D11ShaderResourceView *pNullResources[16] = {0};
     pContext->PSSetShaderResources(0, 16, pNullResources );
@@ -352,6 +351,8 @@ void CPUTRenderTargetColor::SetRenderTarget(
     ((CPUTRenderParametersDX*)&renderParams)->mpContext->RSSetViewports( 1, &viewport );
 
     mRenderTargetSet = true;
+
+    CPUTMaterialDX11::ResetStateTracking();
 } // CPUTRenderTargetColor::SetRenderTarget()
 
 //-----------------------------------------------

@@ -1,0 +1,18 @@
+My\ Amplifier\ XE\ Results*
+SoftwareOcclusionCulling_2010
+SoftwareOcclusionCulling_2012
+SoftwareOcclusionCulling_2010_AVX
+SoftwareOcclusionCulling_2012_AVX
+Debug
+Release
+Profile
+ipch
+lib
+x64
+*.exe
+*.ilk
+*.pdb
+*.suo
+*.sdf
+*.opensdf
+*.vcxproj.user

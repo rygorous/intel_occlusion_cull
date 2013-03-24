@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -59,7 +59,7 @@ protected:
 
     // Destructor is not public.  Must release instead of delete.
     virtual ~CPUTMaterial(){
-		// The following are allocated in the derived class.  So, release there too.
+        // The following are allocated in the derived class.  So, release there too.
         // for( UINT ii=0; ii<CPUT_MATERIAL_MAX_TEXTURE_SLOTS; ii++ ) { SAFE_RELEASE( mpTexture[ii] ); }
         // for( UINT ii=0; ii<CPUT_MATERIAL_MAX_BUFFER_SLOTS; ii++ ) { SAFE_RELEASE( mpBuffer[ii] ); }
         // for( UINT ii=0; ii<CPUT_MATERIAL_MAX_CONSTANT_BUFFER_SLOTS; ii++ ) { SAFE_RELEASE( mpConstantBuffer[ii] ); }

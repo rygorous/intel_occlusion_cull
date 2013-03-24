@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -56,7 +56,6 @@ HRESULT CPUTSprite::CreateSprite(
         { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,    0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
         {0}
     };
-    UINT numElements = (sizeof(pLayout)/sizeof(pLayout[0])) - 1;
     CPUTVertexShaderDX11 *pVertexShader = ((CPUTMaterialDX11*)mpMaterial)->GetVertexShader();
     ID3D11Device *pD3dDevice = CPUT_DX11::GetDevice();
     CPUTInputLayoutCacheDX11::GetInputLayoutCache()->GetLayout( pD3dDevice, pLayout, pVertexShader, &mpInputLayout);

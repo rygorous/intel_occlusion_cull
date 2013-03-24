@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -26,15 +26,21 @@ class AABBoxRasterizerScalarMT : public AABBoxRasterizerScalar
 		AABBoxRasterizerScalarMT();
 		~AABBoxRasterizerScalarMT();
 
-		void IsInsideViewFrustum(CPUTCamera *pCamera);
-		void TransformAABBoxAndDepthTest();
+		struct PerTaskData
+		{
+			UINT idx;
+			AABBoxRasterizerScalarMT *pAABB; 
+		};
+
+		PerTaskData mTaskData[2];
+		void TransformAABBoxAndDepthTest(CPUTCamera *pCamera, UINT idx);
+		void WaitForTaskToFinish(UINT idx);
+		void ReleaseTaskHandles(UINT idx);
 
 	private:
-		static void IsInsideViewFrustum(VOID* taskData, INT context, UINT taskId, UINT taskCount);
-		void IsInsideViewFrustum(UINT taskId, UINT taskCount);
 
 		static void TransformAABBoxAndDepthTest(VOID* pTaskData, INT context, UINT taskId, UINT taskCount);
-		void TransformAABBoxAndDepthTest(UINT taskId);
+		void TransformAABBoxAndDepthTest(UINT taskId, UINT idx);
 };
 
 

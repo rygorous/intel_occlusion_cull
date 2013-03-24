@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -21,76 +21,102 @@ DepthBufferRasterizerSSEST::DepthBufferRasterizerSSEST()
 	: DepthBufferRasterizerSSE()
 {
 	int size = SCREENH_IN_TILES * SCREENW_IN_TILES; 
-	mpBin = new UINT[size * MAX_TRIS_IN_BIN_ST];
-	mpBinModel = new USHORT[size * MAX_TRIS_IN_BIN_ST];
-	mpBinMesh = new USHORT[size * MAX_TRIS_IN_BIN_ST];
-	mpNumTrisInBin = new USHORT[size];
+	mpBin[0] = new UINT[size * MAX_TRIS_IN_BIN_ST];
+	mpBinModel[0] = new USHORT[size * MAX_TRIS_IN_BIN_ST];
+	mpBinMesh[0] = new USHORT[size * MAX_TRIS_IN_BIN_ST];
+	mpNumTrisInBin[0] = new USHORT[size];
+
+	mpBin[1] = new UINT[size * MAX_TRIS_IN_BIN_ST];
+	mpBinModel[1] = new USHORT[size * MAX_TRIS_IN_BIN_ST];
+	mpBinMesh[1] = new USHORT[size * MAX_TRIS_IN_BIN_ST];
+	mpNumTrisInBin[1] = new USHORT[size];
 }
 
 DepthBufferRasterizerSSEST::~DepthBufferRasterizerSSEST()
 {
-	SAFE_DELETE_ARRAY(mpBin);
-	SAFE_DELETE_ARRAY(mpBinModel);
-	SAFE_DELETE_ARRAY(mpBinMesh);
-	SAFE_DELETE_ARRAY(mpNumTrisInBin);
-}
+	SAFE_DELETE_ARRAY(mpBin[0]);
+	SAFE_DELETE_ARRAY(mpBinModel[0]);
+	SAFE_DELETE_ARRAY(mpBinMesh[0]);
+	SAFE_DELETE_ARRAY(mpNumTrisInBin[0]);
 
-//------------------------------------------------------------
-// * Determine if the occludee model is inside view frustum
-//------------------------------------------------------------
-void DepthBufferRasterizerSSEST::IsVisible(CPUTCamera* pCamera)
-{
-	mpCamera = pCamera;
-	
-	for(UINT i = 0; i < mNumModels1; i++)
-	{
-		mpTransformedModels1[i].IsVisible(mpCamera);
-	}
+	SAFE_DELETE_ARRAY(mpBin[1]);
+	SAFE_DELETE_ARRAY(mpBinModel[1]);
+	SAFE_DELETE_ARRAY(mpBinMesh[1]);
+	SAFE_DELETE_ARRAY(mpNumTrisInBin[1]);
 }
 
 //------------------------------------------------------------------------------
+// * Determine if the occludee model is inside view frustum
 // * Transform the occluder models on the CPU
 // * Bin the occluder triangles into tiles that the frame buffer is divided into
 // * Rasterize the occluder triangles to the CPU depth buffer
 //-------------------------------------------------------------------------------
-void DepthBufferRasterizerSSEST::TransformModelsAndRasterizeToDepthBuffer()
+void DepthBufferRasterizerSSEST::TransformModelsAndRasterizeToDepthBuffer(CPUTCamera *pCamera, UINT idx)
 {
-	mRasterizeTimer.StartTimer();
-		
-	TransformMeshes();
-	BinTransformedMeshes();
-	for(UINT i = 0; i < NUM_TILES; i++)
+	QueryPerformanceCounter(&mStartTime[idx]);
+	mpCamera[idx] = pCamera;
+	
+	BoxTestSetupSSE setup;
+	setup.Init(mpViewMatrix[idx], mpProjMatrix[idx], viewportMatrix, pCamera, mOccluderSizeThreshold);
+
+	if(mEnableFCulling)
 	{
-		RasterizeBinnedTrianglesToDepthBuffer(i);
+		for(UINT i = 0; i < mNumModels1; i++)
+		{
+			mpTransformedModels1[i].InsideViewFrustum(setup, idx);
+		}
+	}
+	else
+	{
+		for(UINT i = 0; i < mNumModels1; i++)
+		{
+			mpTransformedModels1[i].TooSmall(setup, idx);
+		}
 	}
 
-	mRasterizeTime[mTimeCounter++] = mRasterizeTimer.StopTimer();
-	mTimeCounter = mTimeCounter >= AVG_COUNTER ? 0 : mTimeCounter;
-
-	mNumRasterized = 0;
-	for(UINT i = 0; i < mNumModels1; i++)
+	ActiveModels(idx);
+	TransformMeshes(idx);
+	BinTransformedMeshes(idx);
+	for(UINT i = 0; i < NUM_TILES; i++)
 	{
-		mNumRasterized += mpTransformedModels1[i].IsRasterized2DB() ? 1 : 0;
+		RasterizeBinnedTrianglesToDepthBuffer(i, idx);
+	}
+
+	QueryPerformanceCounter(&mStopTime[idx][0]);
+	mRasterizeTime[mTimeCounter++] = ((double)(mStopTime[idx][0].QuadPart - mStartTime[idx].QuadPart)) / ((double)glFrequency.QuadPart);
+	mTimeCounter = mTimeCounter >= AVG_COUNTER ? 0 : mTimeCounter;
+}
+
+void DepthBufferRasterizerSSEST::ActiveModels(UINT idx)
+{
+	ResetActive(idx);
+	for (UINT i = 0; i < mNumModels1; i++)
+	{
+		if(mpTransformedModels1[i].IsRasterized2DB(idx))
+		{
+			Activate(i, idx);
+		}
 	}
 }
 
 //-------------------------------------------------------------------
 // Trasforms the occluder vertices to screen space once every frame
 //-------------------------------------------------------------------
-void DepthBufferRasterizerSSEST::TransformMeshes()
+void DepthBufferRasterizerSSEST::TransformMeshes(UINT idx)
 {
-	for(UINT ss = 0; ss < mNumModels1; ss++)
+	for(UINT active = 0; active < mNumModelsA[idx]; active++)
     {
+		UINT ss = mpModelIndexA[idx][active];
 		UINT thisSurfaceVertexCount = mpTransformedModels1[ss].GetNumVertices();
         
-        mpTransformedModels1[ss].TransformMeshes(mViewMatrix, mProjMatrix, 0, thisSurfaceVertexCount - 1, mpCamera);
+        mpTransformedModels1[ss].TransformMeshes(0, thisSurfaceVertexCount - 1, mpCamera[idx], idx);
     }
 }
 
 //-------------------------------------------------
 // Bins the transformed triangles into tiles
 //-------------------------------------------------
-void DepthBufferRasterizerSSEST::BinTransformedMeshes()
+void DepthBufferRasterizerSSEST::BinTransformedMeshes(UINT idx)
 {
 	// Reset the bin count.  Note the data layout makes this traversal a bit awkward.
     // We can't just use memset() because the last array index isn't what's varying.
@@ -101,16 +127,17 @@ void DepthBufferRasterizerSSEST::BinTransformedMeshes()
         for(UINT xx = 0; xx < SCREENW_IN_TILES; xx++)
         {
 			UINT index = offset + (XOFFSET1_ST * xx);
-            mpNumTrisInBin[index] = 0;
+            mpNumTrisInBin[idx][index] = 0;
 	    }
     }
 
 	// Now, process all of the surfaces that contain this task's triangle range.
-	for(UINT ss = 0; ss < mNumModels1; ss++)
+	for(UINT active = 0; active < mNumModelsA[idx]; active++)
     {
+		UINT ss = mpModelIndexA[idx][active];
 		UINT thisSurfaceTriangleCount = mpTransformedModels1[ss].GetNumTriangles();
         
-		mpTransformedModels1[ss].BinTransformedTrianglesST(0, ss, 0, thisSurfaceTriangleCount - 1, mpBin, mpBinModel, mpBinMesh, mpNumTrisInBin);
+		mpTransformedModels1[ss].BinTransformedTrianglesST(0, ss, 0, thisSurfaceTriangleCount - 1, mpBin[idx], mpBinModel[idx], mpBinMesh[idx], mpNumTrisInBin[idx], idx);
 	}
 }
 
@@ -118,16 +145,16 @@ void DepthBufferRasterizerSSEST::BinTransformedMeshes()
 // For each tile go through all the bins and process all the triangles in it.
 // Rasterize each triangle to the CPU depth buffer. 
 //-------------------------------------------------------------------------------
-void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tileId)
+void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tileId, UINT idx)
 {
 	// Set DAZ and FZ MXCSR bits to flush denormals to zero (i.e., make it faster)
 	_mm_setcsr( _mm_getcsr() | 0x8040 );
 
-	__m128i colOffset = _mm_set_epi32(0, 1, 0, 1);
-	__m128i rowOffset = _mm_set_epi32(0, 0, 1, 1);
+	__m128i colOffset = _mm_setr_epi32(0, 1, 0, 1);
+	__m128i rowOffset = _mm_setr_epi32(0, 0, 1, 1);
 
 	__m128i fxptZero = _mm_setzero_si128();
-	float* pDepthBuffer = (float*)mpRenderTargetPixels; 
+	float* pDepthBuffer = (float*)mpRenderTargetPixels[idx]; 
 
 	// Based on TaskId determine which tile to process
 	UINT screenWidthInTiles = SCREENW/TILE_WIDTH_IN_PIXELS;
@@ -135,21 +162,23 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
     UINT tileY = tileId / screenWidthInTiles;
 
     int tileStartX = tileX * TILE_WIDTH_IN_PIXELS;
-	int tileEndX   = tileStartX + TILE_WIDTH_IN_PIXELS;
+	int tileEndX   = tileStartX + TILE_WIDTH_IN_PIXELS - 1;
 	
 	int tileStartY = tileY * TILE_HEIGHT_IN_PIXELS;
-	int tileEndY   = tileStartY + TILE_HEIGHT_IN_PIXELS;
+	int tileEndY   = tileStartY + TILE_HEIGHT_IN_PIXELS - 1;
+
+	ClearDepthTile(tileStartX, tileStartY, tileEndX+1, tileEndY+1, idx);
 
 	UINT bin = 0;
 	UINT binIndex = 0;
 	UINT offset1 = YOFFSET1_ST * tileY + XOFFSET1_ST * tileX;
 	UINT offset2 = YOFFSET2_ST * tileY + XOFFSET2_ST * tileX;
-	UINT numTrisInBin = mpNumTrisInBin[offset1 + bin];
+	UINT numTrisInBin = mpNumTrisInBin[idx][offset1 + bin];
 
-	vFloat4 xformedPos[3];
+	__m128 gatherBuf[4][3];
 	bool done = false;
 	bool allBinsEmpty = true;
-	mNumRasterizedTris[tileId] = numTrisInBin;
+	mNumRasterizedTris[idx][tileId] = numTrisInBin;
 	while(!done)
 	{
 		// Loop through all the bins and process 4 binned traingles at a time
@@ -164,18 +193,18 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
 				{
 					break;
 				}
-				numTrisInBin = mpNumTrisInBin[offset1 + bin];
-				mNumRasterizedTris[tileId] += numTrisInBin;
+				numTrisInBin = mpNumTrisInBin[idx][offset1 + bin];
+				mNumRasterizedTris[idx][tileId] += numTrisInBin;
 				binIndex = 0;
 			}
 			if(!numTrisInBin)
 			{
 				break; // No more tris in the bins
 			}
-			USHORT modelId = mpBinModel[offset2 + bin * MAX_TRIS_IN_BIN_ST + binIndex];
-			USHORT meshId = mpBinMesh[offset2 + bin * MAX_TRIS_IN_BIN_ST + binIndex];
-			UINT triIdx = mpBin[offset2 + bin * MAX_TRIS_IN_BIN_ST + binIndex];
-			mpTransformedModels1[modelId].Gather((float*)&xformedPos, meshId, triIdx, ii);
+			USHORT modelId = mpBinModel[idx][offset2 + bin * MAX_TRIS_IN_BIN_ST + binIndex];
+			USHORT meshId = mpBinMesh[idx][offset2 + bin * MAX_TRIS_IN_BIN_ST + binIndex];
+			UINT triIdx = mpBin[idx][offset2 + bin * MAX_TRIS_IN_BIN_ST + binIndex];
+			mpTransformedModels1[modelId].Gather(gatherBuf[ii], meshId, triIdx, idx);
 			allBinsEmpty = false;
 			numSimdTris++; 
 
@@ -189,65 +218,65 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
 			return;
 		}
 
-		vFloat4* xformedvPos = (vFloat4*)&xformedPos;
-
 		// use fixed-point only for X and Y.  Avoid work for Z and W.
-        vFxPt4 xFormedFxPtPos[3];
+        __m128i fxPtX[3], fxPtY[3];
+		__m128 Z[3];
 		for(int i = 0; i < 3; i++)
 		{
-			xFormedFxPtPos[i].X = _mm_cvtps_epi32(xformedvPos[i].X);
-			xFormedFxPtPos[i].Y = _mm_cvtps_epi32(xformedvPos[i].Y);
-			xFormedFxPtPos[i].Z = _mm_cvtps_epi32(xformedvPos[i].Z);
-			xFormedFxPtPos[i].W = _mm_cvtps_epi32(xformedvPos[i].W);
+			__m128 v0 = gatherBuf[0][i];
+			__m128 v1 = gatherBuf[1][i];
+			__m128 v2 = gatherBuf[2][i];
+			__m128 v3 = gatherBuf[3][i];
+
+  			// transpose into SoA layout
+			_MM_TRANSPOSE4_PS(v0, v1, v2, v3);
+			fxPtX[i] = _mm_cvtps_epi32(v0);
+			fxPtY[i] = _mm_cvtps_epi32(v1);
+			Z[i] = v2;
 		}
 
 		// Fab(x, y) =     Ax       +       By     +      C              = 0
 		// Fab(x, y) = (ya - yb)x   +   (xb - xa)y + (xa * yb - xb * ya) = 0
 		// Compute A = (ya - yb) for the 3 line segments that make up each triangle
-		__m128i A0 = _mm_sub_epi32(xFormedFxPtPos[1].Y, xFormedFxPtPos[2].Y);
-		__m128i A1 = _mm_sub_epi32(xFormedFxPtPos[2].Y, xFormedFxPtPos[0].Y);
-		__m128i A2 = _mm_sub_epi32(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y);
+		__m128i A0 = _mm_sub_epi32(fxPtY[1], fxPtY[2]);
+		__m128i A1 = _mm_sub_epi32(fxPtY[2], fxPtY[0]);
+		__m128i A2 = _mm_sub_epi32(fxPtY[0], fxPtY[1]);
 
 		// Compute B = (xb - xa) for the 3 line segments that make up each triangle
-		__m128i B0 = _mm_sub_epi32(xFormedFxPtPos[2].X, xFormedFxPtPos[1].X);
-		__m128i B1 = _mm_sub_epi32(xFormedFxPtPos[0].X, xFormedFxPtPos[2].X);
-		__m128i B2 = _mm_sub_epi32(xFormedFxPtPos[1].X, xFormedFxPtPos[0].X);
+		__m128i B0 = _mm_sub_epi32(fxPtX[2], fxPtX[1]);
+		__m128i B1 = _mm_sub_epi32(fxPtX[0], fxPtX[2]);
+		__m128i B2 = _mm_sub_epi32(fxPtX[1], fxPtX[0]);
 
 		// Compute C = (xa * yb - xb * ya) for the 3 line segments that make up each triangle
-		__m128i C0 = _mm_sub_epi32(_mm_mullo_epi32(xFormedFxPtPos[1].X, xFormedFxPtPos[2].Y), _mm_mullo_epi32(xFormedFxPtPos[2].X, xFormedFxPtPos[1].Y));
-		__m128i C1 = _mm_sub_epi32(_mm_mullo_epi32(xFormedFxPtPos[2].X, xFormedFxPtPos[0].Y), _mm_mullo_epi32(xFormedFxPtPos[0].X, xFormedFxPtPos[2].Y));
-		__m128i C2 = _mm_sub_epi32(_mm_mullo_epi32(xFormedFxPtPos[0].X, xFormedFxPtPos[1].Y), _mm_mullo_epi32(xFormedFxPtPos[1].X, xFormedFxPtPos[0].Y));
+		__m128i C0 = _mm_sub_epi32(_mm_mullo_epi32(fxPtX[1], fxPtY[2]), _mm_mullo_epi32(fxPtX[2], fxPtY[1]));
+		__m128i C1 = _mm_sub_epi32(_mm_mullo_epi32(fxPtX[2], fxPtY[0]), _mm_mullo_epi32(fxPtX[0], fxPtY[2]));
+		__m128i C2 = _mm_sub_epi32(_mm_mullo_epi32(fxPtX[0], fxPtY[1]), _mm_mullo_epi32(fxPtX[1], fxPtY[0]));
 
 		// Compute triangle area
-		__m128i triArea = _mm_mullo_epi32(A0, xFormedFxPtPos[0].X);
-		triArea = _mm_add_epi32(triArea, _mm_mullo_epi32(B0, xFormedFxPtPos[0].Y));
-		triArea = _mm_add_epi32(triArea, C0);
-
+		__m128i triArea = _mm_mullo_epi32(B2, A1);
+		triArea = _mm_sub_epi32(triArea, _mm_mullo_epi32(B1, A2));
 		__m128 oneOverTriArea = _mm_div_ps(_mm_set1_ps(1.0f), _mm_cvtepi32_ps(triArea));
 
-		// Use bounding box traversal strategy to determine which pixels to rasterize 
-		__m128i startX = _mm_and_si128(Max(Min(Min(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(tileStartX)), _mm_set1_epi32(0xFFFFFFFE));
-		__m128i endX   = Min(_mm_add_epi32(Max(Max(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(1)), _mm_set1_epi32(tileEndX));
+		Z[1] = _mm_mul_ps(_mm_sub_ps(Z[1], Z[0]), oneOverTriArea);
+		Z[2] = _mm_mul_ps(_mm_sub_ps(Z[2], Z[0]), oneOverTriArea);
 
-		__m128i startY = _mm_and_si128(Max(Min(Min(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(tileStartY)), _mm_set1_epi32(0xFFFFFFFE));
-		__m128i endY   = Min(_mm_add_epi32(Max(Max(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(1)), _mm_set1_epi32(tileEndY));
+		// Use bounding box traversal strategy to determine which pixels to rasterize 
+		__m128i startX = _mm_and_si128(Max(Min(Min(fxPtX[0], fxPtX[1]), fxPtX[2]), _mm_set1_epi32(tileStartX)), _mm_set1_epi32(0xFFFFFFFE));
+		__m128i endX   = Min(_mm_add_epi32(Max(Max(fxPtX[0], fxPtX[1]), fxPtX[2]), _mm_set1_epi32(1)), _mm_set1_epi32(tileEndX));
+
+		__m128i startY = _mm_and_si128(Max(Min(Min(fxPtY[0], fxPtY[1]), fxPtY[2]), _mm_set1_epi32(tileStartY)), _mm_set1_epi32(0xFFFFFFFE));
+		__m128i endY   = Min(_mm_add_epi32(Max(Max(fxPtY[0], fxPtY[1]), fxPtY[2]), _mm_set1_epi32(1)), _mm_set1_epi32(tileEndY));
 
 		// Now we have 4 triangles set up.  Rasterize them each individually.
         for(int lane=0; lane < numSimdTris; lane++)
         {
 			// Extract this triangle's properties from the SIMD versions
-            __m128 zz[3], oneOverW[3];
+            __m128 zz[3];
 			for(int vv = 0; vv < 3; vv++)
 			{
-				zz[vv] = _mm_set1_ps(xformedvPos[vv].Z.m128_f32[lane]);
-				oneOverW[vv] = _mm_set1_ps(xformedvPos[vv].W.m128_f32[lane]);
+				zz[vv] = _mm_set1_ps(Z[vv].m128_f32[lane]);
 			}
-
-			__m128 oneOverTotalArea = _mm_set1_ps(oneOverTriArea.m128_f32[lane]);
-			zz[0] *= oneOverTotalArea;
-			zz[1] *= oneOverTotalArea;
-			zz[2] *= oneOverTotalArea;
-			
+									
 			int startXx = startX.m128i_i32[lane];
 			int endXx	= endX.m128i_i32[lane];
 			int startYy = startY.m128i_i32[lane];
@@ -261,29 +290,15 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
 			__m128i bb1 = _mm_set1_epi32(B1.m128i_i32[lane]);
 			__m128i bb2 = _mm_set1_epi32(B2.m128i_i32[lane]);
 
-			__m128i cc0 = _mm_set1_epi32(C0.m128i_i32[lane]);
-			__m128i cc1 = _mm_set1_epi32(C1.m128i_i32[lane]);
-			__m128i cc2 = _mm_set1_epi32(C2.m128i_i32[lane]);
-
 			__m128i aa0Inc = _mm_slli_epi32(aa0, 1);
 			__m128i aa1Inc = _mm_slli_epi32(aa1, 1);
 			__m128i aa2Inc = _mm_slli_epi32(aa2, 1);
 
 			__m128i row, col;
 
-			int rowIdx;
-			// To avoid this branching, choose one method to traverse and store the pixel depths
-			if(gVisualizeDepthBuffer)
-			{
-				// Sequentially traverse and store pixel depths contiguously
-				rowIdx = (startYy * SCREENW + startXx);
-			}
-			else
-			{
-				// Tranverse pixels in 2x2 blocks and store 2x2 pixel quad depths contiguously in memory ==> 2*X
-				// This method provides better perfromance
-				rowIdx = (startYy * SCREENW + 2 * startXx);
-			}
+			// Tranverse pixels in 2x2 blocks and store 2x2 pixel quad depths contiguously in memory ==> 2*X
+			// This method provides better perfromance
+			int rowIdx = (startYy * SCREENW + 2 * startXx);
 
 			col = _mm_add_epi32(colOffset, _mm_set1_epi32(startXx));
 			__m128i aa0Col = _mm_mullo_epi32(aa0, col);
@@ -291,85 +306,60 @@ void DepthBufferRasterizerSSEST::RasterizeBinnedTrianglesToDepthBuffer(UINT tile
 			__m128i aa2Col = _mm_mullo_epi32(aa2, col);
 
 			row = _mm_add_epi32(rowOffset, _mm_set1_epi32(startYy));
-			__m128i bb0Row = _mm_add_epi32(_mm_mullo_epi32(bb0, row), cc0);
-			__m128i bb1Row = _mm_add_epi32(_mm_mullo_epi32(bb1, row), cc1);
-			__m128i bb2Row = _mm_add_epi32(_mm_mullo_epi32(bb2, row), cc2);
+			__m128i bb0Row = _mm_add_epi32(_mm_mullo_epi32(bb0, row), _mm_set1_epi32(C0.m128i_i32[lane]));
+			__m128i bb1Row = _mm_add_epi32(_mm_mullo_epi32(bb1, row), _mm_set1_epi32(C1.m128i_i32[lane]));
+			__m128i bb2Row = _mm_add_epi32(_mm_mullo_epi32(bb2, row), _mm_set1_epi32(C2.m128i_i32[lane]));
+
+			__m128i sum0Row = _mm_add_epi32(aa0Col, bb0Row);
+			__m128i sum1Row = _mm_add_epi32(aa1Col, bb1Row);
+			__m128i sum2Row = _mm_add_epi32(aa2Col, bb2Row);
 
 			__m128i bb0Inc = _mm_slli_epi32(bb0, 1);
 			__m128i bb1Inc = _mm_slli_epi32(bb1, 1);
 			__m128i bb2Inc = _mm_slli_epi32(bb2, 1);
 
+			__m128 zx = _mm_mul_ps(_mm_cvtepi32_ps(aa1Inc), zz[1]);
+			zx = _mm_add_ps(zx, _mm_mul_ps(_mm_cvtepi32_ps(aa2Inc), zz[2]));
+
 			// Incrementally compute Fab(x, y) for all the pixels inside the bounding box formed by (startX, endX) and (startY, endY)
 			for(int r = startYy; r < endYy; r += 2,
-											row  = _mm_add_epi32(row, _mm_set1_epi32(2)),
-											rowIdx = rowIdx + 2 * SCREENW,
-											bb0Row = _mm_add_epi32(bb0Row, bb0Inc),
-											bb1Row = _mm_add_epi32(bb1Row, bb1Inc),
-											bb2Row = _mm_add_epi32(bb2Row, bb2Inc))
+											rowIdx += 2 * SCREENW,
+											sum0Row = _mm_add_epi32(sum0Row, bb0Inc),
+											sum1Row = _mm_add_epi32(sum1Row, bb1Inc),
+											sum2Row = _mm_add_epi32(sum2Row, bb2Inc))
 			{
 				// Compute barycentric coordinates 
-				int idx = rowIdx;
-				__m128i alpha = _mm_add_epi32(aa0Col, bb0Row);
-				__m128i beta = _mm_add_epi32(aa1Col, bb1Row);
-				__m128i gama = _mm_add_epi32(aa2Col, bb2Row);
+				int index = rowIdx;
+				__m128i alpha = sum0Row;
+				__m128i beta = sum1Row;
+				__m128i gama = sum2Row;
 
-				int idxIncr;
-				if(gVisualizeDepthBuffer)
-				{
-					idxIncr = 2;
-				}
-				else
-				{
-					idxIncr = 4;
-				}
+				//Compute barycentric-interpolated depth
+				__m128 depth = zz[0];
+				depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), zz[1]));
+				depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), zz[2]));
 
 				for(int c = startXx; c < endXx; c += 2,
-												idx = idx + idxIncr,
+												index += 4,
 												alpha = _mm_add_epi32(alpha, aa0Inc),
 												beta  = _mm_add_epi32(beta, aa1Inc),
-												gama  = _mm_add_epi32(gama, aa2Inc))
+												gama  = _mm_add_epi32(gama, aa2Inc),
+												depth = _mm_add_ps(depth, zx))
 				{
 					//Test Pixel inside triangle
-					__m128i mask = _mm_cmplt_epi32(fxptZero, _mm_or_si128(_mm_or_si128(alpha, beta), gama));
+					__m128i mask = _mm_or_si128(_mm_or_si128(alpha, beta), gama);
 					
-					// Early out if all of this quad's pixels are outside the triangle.
-					if(_mm_test_all_zeros(mask, mask))
-					{
-						continue;
-					}
-					
-					// Compute barycentric-interpolated depth
-			        __m128 depth = _mm_mul_ps(_mm_cvtepi32_ps(alpha), zz[0]);
-					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(beta), zz[1]));
-					depth = _mm_add_ps(depth, _mm_mul_ps(_mm_cvtepi32_ps(gama), zz[2]));
-					
-					__m128 previousDepthValue;
-					if(gVisualizeDepthBuffer)
-					{
-						previousDepthValue = _mm_set_ps(pDepthBuffer[idx], pDepthBuffer[idx + 1], pDepthBuffer[idx + SCREENW], pDepthBuffer[idx + SCREENW + 1]);
-					}
-					else
-					{
-						previousDepthValue = *(__m128*)&pDepthBuffer[idx];
-					}
-	
-					__m128 depthMask = _mm_cmpge_ps(depth, previousDepthValue);
-					__m128i finalMask = _mm_and_si128(mask, _mm_castps_si128(depthMask));
-										
-					if(gVisualizeDepthBuffer)
-					{
-						if(finalMask.m128i_i32[3]) pDepthBuffer[idx] = depth.m128_f32[3];
-						if(finalMask.m128i_i32[2]) pDepthBuffer[idx + 1] = depth.m128_f32[2];
-						if(finalMask.m128i_i32[1]) pDepthBuffer[idx + SCREENW] = depth.m128_f32[1];
-						if(finalMask.m128i_i32[0]) pDepthBuffer[idx + SCREENW + 1] = depth.m128_f32[0];
-					}
-					else
-					{
-						depth = _mm_blendv_ps(previousDepthValue, depth, _mm_castsi128_ps(finalMask));
-						_mm_store_ps(&pDepthBuffer[idx], depth);
-					}
+					__m128 previousDepthValue = _mm_load_ps(&pDepthBuffer[index]);
+					__m128 mergedDepth = _mm_max_ps(depth, previousDepthValue);
+					__m128 finalDepth = _mm_blendv_ps(mergedDepth, previousDepthValue, _mm_castsi128_ps(mask));
+					_mm_store_ps(&pDepthBuffer[index], finalDepth);
 				}//for each column											
 			}// for each row
 		}// for each triangle
 	}// for each set of SIMD# triangles
+}
+
+
+void DepthBufferRasterizerSSEST::ComputeR2DBTime(UINT idx)
+{
 }

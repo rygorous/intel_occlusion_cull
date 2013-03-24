@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -30,9 +30,12 @@ public:
     CPUTTimerWin();
     virtual void   StartTimer();
     virtual double StopTimer();
-	virtual double GetTotalTime();
-	virtual double GetElapsedTime();
+    virtual double GetTotalTime();
+    virtual double GetElapsedTime();
     virtual void   ResetTimer();
+
+	virtual LARGE_INTEGER GetTimer();
+	virtual double GetTime(LARGE_INTEGER t1, LARGE_INTEGER t2);
 
 private:
     bool mbCounting;

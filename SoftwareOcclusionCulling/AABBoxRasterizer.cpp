@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -18,8 +18,6 @@
 #include "AABBoxRasterizer.h"
 
 AABBoxRasterizer::AABBoxRasterizer()
-	: mAABBoxDepthTest(TASKSETHANDLE_INVALID),
-	  mAABBoxInsideViewFrustum(TASKSETHANDLE_INVALID)
 {
 
 }

@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -35,7 +35,7 @@ CPUTDomainShaderDX11 *CPUTDomainShaderDX11::CreateDomainShader(
     // Create the Domain shader
     // TODO: Move to Domain shader class
     HRESULT hr = pD3dDevice->CreateDomainShader( pCompiledBlob->GetBufferPointer(), pCompiledBlob->GetBufferSize(), NULL, &pNewDomainShader );
-    ASSERT( SUCCEEDED(result), _L("Error compiling Domain shader:\n\n") );
+    ASSERT( SUCCEEDED(hr), _L("Error creating Domain shader:\n\n") );
     // cString DebugName = _L("CPUTAssetLibraryDX11::GetDomainShader ")+name;
     // CPUTSetDebugName(pNewDomainShader, DebugName);
 
@@ -68,7 +68,7 @@ CPUTDomainShaderDX11 *CPUTDomainShaderDX11::CreateDomainShaderFromMemory(
     // Create the Domain shader
     // TODO: Move to Domain shader class
     HRESULT hr = pD3dDevice->CreateDomainShader( pCompiledBlob->GetBufferPointer(), pCompiledBlob->GetBufferSize(), NULL, &pNewDomainShader );
-    ASSERT( SUCCEEDED(result), _L("Error compiling Domain shader:\n\n") );
+    ASSERT( SUCCEEDED(hr), _L("Error creating Domain shader:\n\n") );
     // cString DebugName = _L("CPUTAssetLibraryDX11::GetDomainShader ")+name;
     // CPUTSetDebugName(pNewDomainShader, DebugName);
 

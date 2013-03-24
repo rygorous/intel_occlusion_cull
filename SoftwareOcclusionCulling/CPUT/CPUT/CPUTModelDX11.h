@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -27,7 +27,7 @@ class CPUTMaterialDX11;
 struct CPUTModelConstantBuffer
 {
     XMMATRIX  World;
-	XMMATRIX  WorldViewProjection;
+    XMMATRIX  WorldViewProjection;
     XMMATRIX  InverseWorld;
     XMVECTOR  LightDirection;
     XMVECTOR  EyePosition;
@@ -44,27 +44,32 @@ class CPUTModelDX11 : public CPUTModel
 {
     friend class CPUTMaterialDX11;
 protected:
-    ID3D11Buffer      *mpModelConstantBuffer;
-    CPUTBuffer        *mpCPUTConstantBuffer;
+    static ID3D11Buffer *mpModelConstantBuffer;
 
     // Destructor is not public.  Must release instead of delete.
-    ~CPUTModelDX11();
+    ~CPUTModelDX11()
+    {
+        SAFE_RELEASE(mpModelConstantBuffer); // TODO: This is a static.  Better to do somewhere else?
+    }
+
+	static UINT				  mFCullCount;
 
 public:
-    CPUTModelDX11() :
-        mpModelConstantBuffer(NULL),
-        mpCPUTConstantBuffer(NULL)
-    {}
+    CPUTModelDX11(){}
+
+    static void CreateModelConstantBuffer();
 
     CPUTMeshDX11 *GetMesh(const UINT index) const;
     CPUTResult    LoadModel(CPUTConfigBlock *pBlock, int *pParentID, CPUTModel *pMasterModel=NULL);
-    void          SetRenderStates(CPUTRenderParameters &renderParams);
+    void          UpdateShaderConstants(CPUTRenderParameters &renderParams);
     void          Render(CPUTRenderParameters &renderParams);
     void          RenderShadow(CPUTRenderParameters &renderParams);
     void          SetMaterial(UINT ii, CPUTMaterial *pMaterial);
     void          DrawBoundingBox(CPUTRenderParameters &renderParams);
     void          CreateBoundingBoxMesh();
-    CPUTBuffer   *GetModelConstantBuffer() const;
+
+	static void ResetFCullCount(){mFCullCount = 0;}
+	static UINT GetFCullCount(){return mFCullCount;}
 };
 
 

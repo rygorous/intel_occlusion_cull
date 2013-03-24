@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -18,8 +18,6 @@
 #include <string.h>
 #ifdef CPUT_FOR_DX11
 #include "CPUTGuiControllerDX11.h"
-#elif defined(CPUT_FOR_OGLES)
-#include "CPUTGuiControllerOGLES.h" 
 #else    
 #error You must supply a target graphics API (ex: #define CPUT_FOR_DX11), or implement the target API for this file.
 #endif
@@ -138,13 +136,7 @@ void CPUTText::SetEnable(bool in_bEnabled)
     // if it is managed by the auto-arrange function
     if(this->IsAutoArranged())
     {
-#ifdef CPUT_FOR_DX11
         CPUTGuiControllerDX11::GetController()->Resize();
-#elif defined(CPUT_FOR_OGLES)
-        CPUTGuiControllerOGLES::GetController()->Resize();
-#else    
-        #error You must supply a target graphics API (ex: #define CPUT_FOR_DX11), or implement the target API for this file.
-#endif        
     }
 }
 
@@ -301,25 +293,13 @@ void CPUTText::Recalculate()
 
     // tell gui system this control image is now dirty
     // and needs to rebuild it's draw list
-#ifdef CPUT_FOR_DX11
-        CPUTGuiControllerDX11::GetController()->ControlIsDirty();
-#elif defined(CPUT_FOR_OGLES)
-        CPUTGuiControllerOGLES::GetController()->ControlIsDirty();
-#else    
-        #error You must supply a target graphics API (ex: #define CPUT_FOR_DX11), or implement the target API for this file.
-#endif 
+    CPUTGuiControllerDX11::GetController()->ControlIsDirty();
 
     // position or size may move - force a recalculation of this control's location
     // if it is managed by the auto-arrange function
     if(this->IsAutoArranged())
     {
-#ifdef CPUT_FOR_DX11
         CPUTGuiControllerDX11::GetController()->Resize();
-#elif defined(CPUT_FOR_OGLES)
-        CPUTGuiControllerOGLES::GetController()->Resize();
-#else    
-        #error You must supply a target graphics API (ex: #define CPUT_FOR_DX11), or implement the target API for this file.
-#endif 
     }
 }
 

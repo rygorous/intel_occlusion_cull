@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -36,10 +36,10 @@ CPUTModel::~CPUTModel()
     {
         SAFE_RELEASE(mpMaterial[ii]);
         HEAPCHECK;
-		if( mpMesh[ii] )
-		{
-			mpMesh[ii]->DecrementInstanceCount();
-		}
+        if( mpMesh[ii] )
+        {
+            mpMesh[ii]->DecrementInstanceCount();
+        }
         SAFE_RELEASE(mpMesh[ii]);
         HEAPCHECK;
     }
@@ -253,7 +253,7 @@ void CPUTModel::SetMaterial(UINT ii, CPUTMaterial *pMaterial)
     SAFE_RELEASE( mpMaterial[ii] );
 
     mpMaterial[ii] = pMaterial;
-    if(mpMaterial)
+    if(mpMaterial[ii])
     {
         mpMaterial[ii]->AddRef();
     }

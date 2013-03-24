@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -30,7 +30,8 @@ class TransformedMeshScalar : public HelperScalar
 		void Initialize(CPUTMeshDX11 *pMesh);
 		void TransformVertices(const float4x4& cumulativeMatrix, 
 							   UINT start, 
-							   UINT end);
+							   UINT end,
+							   UINT idx);
 
 		void BinTransformedTrianglesST(UINT taskId,
 									   UINT modelId,
@@ -40,7 +41,8 @@ class TransformedMeshScalar : public HelperScalar
 									   UINT* pBin,
 									   USHORT* pBinModel,
 									   USHORT* pBinMesh,
-									   USHORT* pNumTrisInBin);
+									   USHORT* pNumTrisInBin,
+									   UINT idx);
 
 		void BinTransformedTrianglesMT(UINT taskId,
 									   UINT modelId,
@@ -50,25 +52,28 @@ class TransformedMeshScalar : public HelperScalar
 									   UINT* pBin,
 									   USHORT* pBinModel,
 									   USHORT* pBinMesh,
-									   USHORT* pNumTrisInBin);
+									   USHORT* pNumTrisInBin,
+									   UINT idx);
 
-		void GetOneTriangleData(float* xformedPos, UINT triId, UINT lane);
+		void GetOneTriangleData(float* xformedPos, UINT triId, UINT idx);
 
 		inline UINT GetNumTriangles() {return mNumTriangles;}
 		inline UINT GetNumVertices() {return mNumVertices;}
-		inline void SetXformedPos(float4 *pXformedPos){mpXformedPos = pXformedPos;}
-		inline void SetVertexStart(UINT vertexStart){mVertexStart = vertexStart;}
-
+		inline void SetXformedPos(float4 *pXformedPos0, float4 *pXformedPos1)
+		{
+			mpXformedPos[0] = pXformedPos0;
+			mpXformedPos[1] = pXformedPos1;
+		}
+	
 	private:
 		UINT mNumVertices;
 		UINT mNumIndices;
 		UINT mNumTriangles;
 		Vertex *mpVertices;
 		UINT *mpIndices;
-		float4 *mpXformedPos; 
-		UINT mVertexStart;
-
-		void Gather(float4 pOut[3], UINT triId);
+		float4 *mpXformedPos[2]; 
+		
+		void Gather(float4 pOut[3], UINT triId, UINT idx);
 };
 
 

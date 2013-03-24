@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -23,8 +23,8 @@ CPUTInputLayoutCacheDX11* CPUTInputLayoutCacheDX11::mpInputLayoutCache = NULL;
 //-----------------------------------------------------------------------------
 void CPUTInputLayoutCacheDX11::ClearLayoutCache()
 {
-	// iterate over the entire map - and release each layout object
-    std::map<cString, ID3D11InputLayout*>::iterator mapIterator;
+    // iterate over the entire map - and release each layout object
+    std::map<LayoutKey, ID3D11InputLayout*>::iterator mapIterator;
 
     for(mapIterator = mLayoutList.begin(); mapIterator != mLayoutList.end(); mapIterator++)
     {
@@ -64,18 +64,14 @@ CPUTResult CPUTInputLayoutCacheDX11::GetLayout(
     CPUTVertexShaderDX11 *pVertexShader,
     ID3D11InputLayout **ppInputLayout
 ){
-    // Generate the vertex layout pattern portion of the key
-    cString layoutKey = GenerateLayoutKey(pDXLayout);
-
-    // Append the vertex shader pointer to the key for layout<->vertex shader relationship
-    cString address = ptoc(pVertexShader);
-    layoutKey += address;
+    // Generate the vertex layout key
+    LayoutKey layoutKey(pDXLayout, pVertexShader, true);
 
     // Do we already have one like this?
     if( mLayoutList[layoutKey] )
     {
         *ppInputLayout = mLayoutList[layoutKey];
-		(*ppInputLayout)->AddRef();
+        (*ppInputLayout)->AddRef();
         return CPUT_SUCCESS;
     }
     // Not found, create a new ID3D11InputLayout object
@@ -91,7 +87,7 @@ CPUTResult CPUTInputLayoutCacheDX11::GetLayout(
     ID3DBlob *pBlob = pVertexShader->GetBlob();
     hr = pDevice->CreateInputLayout( pDXLayout, numInputLayoutElements, pBlob->GetBufferPointer(), pBlob->GetBufferSize(), ppInputLayout );
     ASSERT( SUCCEEDED(hr), _L("Error creating input layout.") );
-	CPUTSetDebugName( *ppInputLayout, _L("CPUTInputLayoutCacheDX11::GetLayout()") );
+    CPUTSetDebugName( *ppInputLayout, _L("CPUTInputLayoutCacheDX11::GetLayout()") );
 
     // Store this layout object in our map
     mLayoutList[layoutKey] = *ppInputLayout;
@@ -102,28 +98,60 @@ CPUTResult CPUTInputLayoutCacheDX11::GetLayout(
     return CPUT_SUCCESS;
 }
 
-// Generate a string version of the vertex-buffer's layout.  Allows us to search, compare, etc...
 //-----------------------------------------------------------------------------
-cString CPUTInputLayoutCacheDX11::GenerateLayoutKey(D3D11_INPUT_ELEMENT_DESC *pDXLayout)
+CPUTInputLayoutCacheDX11::LayoutKey::LayoutKey()
+    : layout(NULL), vs(NULL), nElems(0), layout_owned(false)
 {
-    // TODO:  Duh!  We can simply memcmp the DX layouts == use the layout input description directly as the key.
-    //        We just need to know how many elements, or NULL terminate it.
-    //        Uses less memory, faster, etc...
-    //        Duh!
+}
 
-    if( !pDXLayout[0].SemanticName )
+CPUTInputLayoutCacheDX11::LayoutKey::LayoutKey(const D3D11_INPUT_ELEMENT_DESC *pDXLayout, void *vs, bool just_ref)
+{
+    nElems = 0;
+    while (pDXLayout[nElems].SemanticName)
     {
-        return _L("");
+        ++nElems;
     }
-    // TODO: Use shorter names, etc...
-    ASSERT( (pDXLayout[0].Format>=0) && (pDXLayout[0].Format<=DXGI_FORMAT_BC7_UNORM_SRGB), _L("Invalid DXGI Format.") );
-    // Start first layout entry and no comma.
-    cString layoutKey = s2ws(pDXLayout[0].SemanticName) + _L(":") + gpDXGIFormatNames[pDXLayout[0].Format];
-    for( int index=1; NULL != pDXLayout[index].SemanticName; index++ )
+
+    if (just_ref)
     {
-        ASSERT( (pDXLayout[index].Format>=0) && (pDXLayout[index].Format<=DXGI_FORMAT_BC7_UNORM_SRGB), _L("Invalid DXGI Format.") );
-        // Add a comma and the next layout entry
-        layoutKey = layoutKey + _L(",") + s2ws(pDXLayout[index].SemanticName) + _L(":") + gpDXGIFormatNames[pDXLayout[index].Format];
+        layout = pDXLayout;
+        this->vs = vs;
+        layout_owned = false;
     }
-    return layoutKey;
+    else
+    {
+        D3D11_INPUT_ELEMENT_DESC *copy = new D3D11_INPUT_ELEMENT_DESC[nElems];
+        memcpy(copy, pDXLayout, nElems * sizeof(*copy));
+        layout = copy;
+        this->vs = vs;
+        layout_owned = true;
+    }
+}
+
+CPUTInputLayoutCacheDX11::LayoutKey::LayoutKey(const LayoutKey &x)
+{
+    D3D11_INPUT_ELEMENT_DESC *copy = new D3D11_INPUT_ELEMENT_DESC[x.nElems];
+    memcpy(copy, x.layout, x.nElems * sizeof(*copy));
+    layout = copy;
+    vs = x.vs;
+    nElems = x.nElems;
+    layout_owned = true;
+}
+
+CPUTInputLayoutCacheDX11::LayoutKey::~LayoutKey()
+{
+    if (layout_owned)
+    {
+        SAFE_DELETE_ARRAY(layout);
+    }
+}
+
+CPUTInputLayoutCacheDX11::LayoutKey &CPUTInputLayoutCacheDX11::LayoutKey::operator =(const LayoutKey &x)
+{
+    LayoutKey copy(x);
+    std::swap(layout, copy.layout);
+    std::swap(vs, copy.vs);
+    std::swap(nElems, copy.nElems);
+    std::swap(layout_owned, copy.layout_owned);
+    return *this;
 }

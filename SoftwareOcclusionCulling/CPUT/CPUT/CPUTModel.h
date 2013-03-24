@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -39,7 +39,6 @@ protected:
     CPUTMesh     **mpMesh;
     CPUTMaterial **mpMaterial;
     CPUTMaterial  *mpShadowCastMaterial;
-
 
     UINT           mMeshCount;
     bool           mIsRenderable;
@@ -102,6 +101,5 @@ public:
     CPUTMaterial *GetMaterial( const cString name, int meshIndex ) const;
     CPUTMaterial *GetMaterial( int meshIndex ) const { return mpMaterial[meshIndex]; }
     CPUTBuffer   *GetBuffer( const cString &name, int meshIndex ) const;
-    virtual CPUTBuffer   *GetModelConstantBuffer() const = 0;
 };
 #endif // __CPUTMODEL_H__

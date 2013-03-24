@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -35,7 +35,7 @@ CPUTPixelShaderDX11 *CPUTPixelShaderDX11::CreatePixelShader(
     // Create the pixel shader
     // TODO: Move to pixel shader class
     HRESULT hr = pD3dDevice->CreatePixelShader( pCompiledBlob->GetBufferPointer(), pCompiledBlob->GetBufferSize(), NULL, &pNewPixelShader );
-    ASSERT( SUCCEEDED(result), _L("Error compiling pixel shader:\n\n") );
+    ASSERT( SUCCEEDED(hr), _L("Error creating pixel shader:\n\n") );
     // cString DebugName = _L("CPUTAssetLibraryDX11::GetPixelShader ")+name;
     // CPUTSetDebugName(pNewPixelShader, DebugName);
 
@@ -68,7 +68,7 @@ CPUTPixelShaderDX11 *CPUTPixelShaderDX11::CreatePixelShaderFromMemory(
     // Create the pixel shader
     // TODO: Move to pixel shader class
     HRESULT hr = pD3dDevice->CreatePixelShader( pCompiledBlob->GetBufferPointer(), pCompiledBlob->GetBufferSize(), NULL, &pNewPixelShader );
-    ASSERT( SUCCEEDED(result), _L("Error compiling pixel shader:\n\n") );
+    ASSERT( SUCCEEDED(hr), _L("Error creating pixel shader:\n\n") );
     // cString DebugName = _L("CPUTAssetLibraryDX11::GetPixelShader ")+name;
     // CPUTSetDebugName(pNewPixelShader, DebugName);
 

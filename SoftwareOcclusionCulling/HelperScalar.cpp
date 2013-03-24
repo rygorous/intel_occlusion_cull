@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -16,6 +16,7 @@
 //--------------------------------------------------------------------------------------
 
 #include "HelperScalar.h"
+#include "CPUTCamera.h"
 
 HelperScalar::HelperScalar()
 {
@@ -35,4 +36,16 @@ float4 HelperScalar::TransformCoords(const float4 &v, const float4x4 &m)
 	result.w = v.x * m.r0.w + v.y * m.r1.w  + v.z * m.r2.w + v.w * m.r3.w;
 
 	return result;
+}
+
+void BoxTestSetupScalar::Init(const float4x4 &viewMatrix, const float4x4 &projMatrix, const float4x4 &viewportMatrix, CPUTCamera *pCamera, float occludeeSizeThreshold)
+{
+	mViewProjViewport = viewMatrix * projMatrix;
+	mViewProjViewport = mViewProjViewport * viewportMatrix;
+
+	mpCamera = pCamera;
+
+	float fov = pCamera->GetFov();
+	float tanOfHalfFov = tanf(fov * 0.5f);
+	radiusThreshold = occludeeSizeThreshold * occludeeSizeThreshold * tanOfHalfFov;
 }

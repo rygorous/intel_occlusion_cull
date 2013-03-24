@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -34,7 +34,7 @@ CPUTComputeShaderDX11 *CPUTComputeShaderDX11::CreateComputeShader(
     // Create the compute shader
     // TODO: Move to compute shader class
     HRESULT hr = pD3dDevice->CreateComputeShader( pCompiledBlob->GetBufferPointer(), pCompiledBlob->GetBufferSize(), NULL, &pNewComputeShader );
-    ASSERT( SUCCEEDED(result), _L("Error compiling compute shader:\n\n") );
+    ASSERT( SUCCEEDED(hr), _L("Error creating compute shader:\n\n") );
     // cString DebugName = _L("CPUTAssetLibraryDX11::GetComputeShader ")+name;
     // CPUTSetDebugName(pNewComputeShader, DebugName);
 
@@ -66,7 +66,7 @@ CPUTComputeShaderDX11 *CPUTComputeShaderDX11::CreateComputeShaderFromMemory(
     // Create the Compute shader
     // TODO: Move to Compute shader class
     HRESULT hr = pD3dDevice->CreateComputeShader( pCompiledBlob->GetBufferPointer(), pCompiledBlob->GetBufferSize(), NULL, &pNewComputeShader );
-    ASSERT( SUCCEEDED(result), _L("Error compiling Compute shader:\n\n") );
+    ASSERT( SUCCEEDED(hr), _L("Error creating Compute shader:\n\n") );
     // cString DebugName = _L("CPUTAssetLibraryDX11::GetComputeShader ")+name;
     // CPUTSetDebugName(pNewComputeShader, DebugName);
 

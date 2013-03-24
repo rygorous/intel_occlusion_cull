@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -18,7 +18,6 @@
 
 // Master #defines for which target
 #define CPUT_FOR_DX11
-//#define CPUT_FOR_OGLES
 
 #include <stdlib.h>
 #include <crtdbg.h>
@@ -304,8 +303,8 @@ enum eCPUTMapType
 
     // define string and literal types
     #define cString std::wstring
-	#define cStringStream std::wstringstream
-	#define cFile std::wfstream
+    #define cStringStream std::wstringstream
+    #define cFile std::wfstream
     #define _L(x)      L##x
 
     // convert integer to wide/unicode ascii
@@ -323,14 +322,10 @@ enum eCPUTMapType
     //-----------------------------------------------------------------------------
     inline std::wstring ptoc(const void *pPointer)
     {
-        std::wstringstream wstream;
-        //std::ostringstream os;
-        wstream << pPointer;
+		wchar_t wcstring[65];
+		swprintf_s(wcstring, _L("%p"), pPointer);
 
-        std::wstring address;
-        address = wstream.str();
-
-        return address;
+		return wcstring;
     }
 
     // convert char* to wide/unicode string
@@ -384,8 +379,8 @@ enum eCPUTMapType
 
     // define string and literal types
     #define cString std::string
-	#define cStringStream std::stringstream
-	#define cFile std::fstream
+    #define cStringStream std::stringstream
+    #define cFile std::fstream
     #define _L(x)      x
 
     // conversion routine
@@ -426,13 +421,7 @@ enum eCPUTMapType
     }
 #endif
 
-#ifdef CPUT_FOR_DX11
 #include "CPUTRenderTarget.h"
-#elif defined(CPUT_FOR_OGLES)
-#include "CPUTRenderTargetOGLES.h"
-#else    
-#error You must supply a target graphics API (ex: #define CPUT_FOR_DX11), or implement the target API for this file.
-#endif
 
 class CPUTCamera;
 class CPUTRenderStateBlock;
@@ -444,7 +433,7 @@ class CPUT:public CPUTEventHandler, public CPUTCallbackHandler
 protected:
     CPUTCamera  *mpCamera;
     CPUTCamera  *mpShadowCamera;
-	CPUTTimer   *mpTimer;
+    CPUTTimer   *mpTimer;
     float3       mLightColor; // TODO: Get from light(s)
     float3       mAmbientColor;
     CPUTBuffer  *mpBackBuffer;

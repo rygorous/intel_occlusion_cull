@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -368,6 +368,15 @@ inline float3 normalize(const float3 &v)
 {
     float length = v.length();
     return v / length;
+}
+
+inline float3 abs3( const float3 &l ) 
+{ 
+    float3 tmp; 
+    tmp.x = abs(l.x); 
+    tmp.y = abs(l.y); 
+    tmp.z = abs(l.z); 
+    return tmp; 
 }
 
 

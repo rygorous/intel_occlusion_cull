@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -22,11 +22,9 @@ TransformedMeshSSE::TransformedMeshSSE()
 	  mNumIndices(0),
 	  mNumTriangles(0),
 	  mpVertices(NULL),
-	  mpIndices(NULL),
-	  mpXformedPos(NULL),
-	  mVertexStart(0)
+	  mpIndices(NULL)
 {
-
+	mpXformedPos[0] = mpXformedPos[1] = NULL;
 }
 
 TransformedMeshSSE::~TransformedMeshSSE()
@@ -48,31 +46,41 @@ void TransformedMeshSSE::Initialize(CPUTMeshDX11* pMesh)
 //-------------------------------------------------------------------
 void TransformedMeshSSE::TransformVertices(__m128 *cumulativeMatrix, 
 										   UINT start, 
-										   UINT end)
+										   UINT end,
+										   UINT idx)
 {
 	UINT i;
 	for(i = start; i <= end; i++)
 	{
-		mpXformedPos[i] = TransformCoords(&mpVertices[i].position, cumulativeMatrix);
-		float oneOverW = 1.0f/max(mpXformedPos[i].m128_f32[3], 0.0000001f);
-		mpXformedPos[i] = _mm_mul_ps(mpXformedPos[i], _mm_set1_ps(oneOverW));
-		mpXformedPos[i].m128_f32[3] = oneOverW;
+		__m128 xform = TransformCoords(&mpVertices[i].position, cumulativeMatrix);
+		__m128 vertZ = _mm_shuffle_ps(xform, xform, 0xaa);
+		__m128 vertW = _mm_shuffle_ps(xform, xform, 0xff);
+		__m128 projected = _mm_div_ps(xform, vertW);
+
+		//set to all 0s if clipped by near clip plane
+		__m128 noNearClip = _mm_cmple_ps(vertZ, vertW);
+		mpXformedPos[idx][i] = _mm_and_ps(projected, noNearClip);
 	}
 }
 
-void TransformedMeshSSE::Gather(vFloat4 pOut[3], UINT triId, UINT numLanes)
+void TransformedMeshSSE::Gather(vFloat4 pOut[3], UINT triId, UINT numLanes, UINT idx)
 {
-	for(UINT l = 0; l < numLanes; l++)
+	const UINT *pInd0 = &mpIndices[triId * 3];
+	const UINT *pInd1 = pInd0 + (numLanes > 1 ? 3 : 0);
+	const UINT *pInd2 = pInd0 + (numLanes > 2 ? 6 : 0);
+	const UINT *pInd3 = pInd0 + (numLanes > 3 ? 9 : 0);
+
+	for(UINT i = 0; i < 3; i++)
 	{
-		for(UINT i = 0; i < 3; i++)
-		{
-			UINT index = mpIndices[(triId * 3) + (l * 3) + i];
-			pOut[i].X.m128_f32[l] = mpXformedPos[index].m128_f32[0];
-			pOut[i].Y.m128_f32[l] = mpXformedPos[index].m128_f32[1];
-			pOut[i].Z.m128_f32[l] = mpXformedPos[index].m128_f32[2];
-			pOut[i].W.m128_f32[l] = mpXformedPos[index].m128_f32[3];
-			
-		}
+		__m128 v0 = mpXformedPos[idx][pInd0[i]];	// x0 y0 z0 w0
+		__m128 v1 = mpXformedPos[idx][pInd1[i]];	// x1 y1 z1 w1
+		__m128 v2 = mpXformedPos[idx][pInd2[i]];	// x2 y2 z2 w2
+		__m128 v3 = mpXformedPos[idx][pInd3[i]];	// x3 y3 z3 w3
+		_MM_TRANSPOSE4_PS(v0, v1, v2, v3);
+		pOut[i].X = v0;
+		pOut[i].Y = v1;
+		pOut[i].Z = v2;
+		pOut[i].W = v3;
 	}
 }
 
@@ -87,64 +95,65 @@ void TransformedMeshSSE::BinTransformedTrianglesST(UINT taskId,
 												   UINT* pBin,
 												   USHORT* pBinModel,
 												   USHORT* pBinMesh,
-												   USHORT* pNumTrisInBin)
+												   USHORT* pNumTrisInBin,
+												   UINT idx)
 {
 	int numLanes = SSE;
+	int laneMask = (1 << numLanes) - 1; 
 	// working on 4 triangles at a time
 	for(UINT index = start; index <= end; index += SSE)
 	{
 		if(index + SSE > end)
 		{
 			numLanes = end - index + 1;
+			laneMask = (1 << numLanes) - 1; 
 		}
 		
 		// storing x,y,z,w for the 3 vertices of 4 triangles = 4*3*4 = 48
 		vFloat4 xformedPos[3];		
-		Gather(xformedPos, index, numLanes);
+		Gather(xformedPos, index, numLanes, idx);
 		
 		// TODO: Maybe convert to Fixed pt and store it once so that dont have to convert to fixedPt again during rasterization
-		vFxPt4 xFormedFxPtPos[3];
+		__m128i fxPtX[3], fxPtY[3];
 		for(int i = 0; i < 3; i++)
 		{
-			xFormedFxPtPos[i].X = _mm_cvtps_epi32(xformedPos[i].X);
-			xFormedFxPtPos[i].Y = _mm_cvtps_epi32(xformedPos[i].Y);
-			xFormedFxPtPos[i].Z = _mm_cvtps_epi32(xformedPos[i].Z);
-			xFormedFxPtPos[i].W = _mm_cvtps_epi32(xformedPos[i].W);
+			fxPtX[i] = _mm_cvtps_epi32(xformedPos[i].X);
+			fxPtY[i] = _mm_cvtps_epi32(xformedPos[i].Y);
 		}
 
 		// Compute triangle are
-		__m128i A0 = _mm_sub_epi32(xFormedFxPtPos[1].Y, xFormedFxPtPos[2].Y);
-		__m128i B0 = _mm_sub_epi32(xFormedFxPtPos[2].X, xFormedFxPtPos[1].X);
-		__m128i C0 = _mm_sub_epi32(_mm_mullo_epi32(xFormedFxPtPos[1].X, xFormedFxPtPos[2].Y), _mm_mullo_epi32(xFormedFxPtPos[2].X, xFormedFxPtPos[1].Y));
+		__m128i triArea1 = _mm_sub_epi32(fxPtX[1], fxPtX[0]);
+		triArea1 = _mm_mullo_epi32(triArea1, _mm_sub_epi32(fxPtY[2], fxPtY[0]));
 
-		__m128i triArea = _mm_mullo_epi32(A0, xFormedFxPtPos[0].X);
-		triArea = _mm_add_epi32(triArea, _mm_mullo_epi32(B0, xFormedFxPtPos[0].Y));
-		triArea = _mm_add_epi32(triArea, C0);
+		__m128i triArea2 = _mm_sub_epi32(fxPtX[0], fxPtX[2]);
+		triArea2 = _mm_mullo_epi32(triArea2, _mm_sub_epi32(fxPtY[0], fxPtY[1]));
 
+		__m128i triArea = _mm_sub_epi32(triArea1, triArea2);
+				
 		// Find bounding box for screen space triangle in terms of pixels
-		__m128 oneOverTriArea = _mm_div_ps(_mm_set1_ps(1.0f), _mm_cvtepi32_ps(triArea));
+		__m128i vStartX = Max(Min(Min(fxPtX[0], fxPtX[1]), fxPtX[2]), _mm_set1_epi32(0));
+		__m128i vEndX   = Min(Max(Max(fxPtX[0], fxPtX[1]), fxPtX[2]), _mm_set1_epi32(SCREENW - 1));
 
-		__m128i vStartX = Max(Min(Min(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(0));
-		__m128i vEndX   = Min(_mm_add_epi32(Max(Max(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(1)), _mm_set1_epi32(SCREENW));
+        __m128i vStartY = Max(Min(Min(fxPtY[0], fxPtY[1]), fxPtY[2]), _mm_set1_epi32(0));
+        __m128i vEndY   = Min(Max(Max(fxPtY[0], fxPtY[1]), fxPtY[2]), _mm_set1_epi32(SCREENH - 1));
 
-        __m128i vStartY = Max(Min(Min(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(0));
-        __m128i vEndY   = Min(_mm_add_epi32(Max(Max(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(1)), _mm_set1_epi32(SCREENH));
+		//Figure out which lanes are active
+		__m128i front = _mm_cmpgt_epi32(triArea, _mm_setzero_si128());
+		__m128i nonEmptyX = _mm_cmpgt_epi32(vEndX, vStartX);
+		__m128i nonEmptyY = _mm_cmpgt_epi32(vEndY, vStartY);
+		__m128 accept1 = _mm_castsi128_ps(_mm_and_si128(_mm_and_si128(front, nonEmptyX), nonEmptyY));
 
+		// All verts must be inside the near clip volume
+		__m128 W0 = _mm_cmpgt_ps(xformedPos[0].W, _mm_setzero_ps());
+		__m128 W1 = _mm_cmpgt_ps(xformedPos[1].W, _mm_setzero_ps());
+		__m128 W2 = _mm_cmpgt_ps(xformedPos[2].W, _mm_setzero_ps());
 
-		for(int i = 0; i < numLanes; i++)
+		__m128 accept = _mm_and_ps(_mm_and_ps(accept1, W0), _mm_and_ps(W1, W2));
+		unsigned int triMask = _mm_movemask_ps(accept) & laneMask; 
+		
+		while(triMask)
 		{
-			// Skip triangle if area is zero 
-			if(triArea.m128i_i32[i] <= 0) continue;
-			
-			float oneOverW[3];
-			for(int j = 0; j < 3; j++)
-			{
-				oneOverW[j] = xformedPos[j].W.m128_f32[i];
-			}
-
-			// Reject the triangle if any of its verts is behind the nearclip plane
-			if(oneOverW[0] > 1.0f || oneOverW[1] > 1.0f || oneOverW[2] > 1.0f) continue;
-
+			int i = FindClearLSB(&triMask);
 			// Convert bounding box in terms of pixels to bounding box in terms of tiles
 			int startX = max(vStartX.m128i_i32[i]/TILE_WIDTH_IN_PIXELS, 0);
 			int endX   = min(vEndX.m128i_i32[i]/TILE_WIDTH_IN_PIXELS, SCREENW_IN_TILES-1);
@@ -183,68 +192,68 @@ void TransformedMeshSSE::BinTransformedTrianglesMT(UINT taskId,
 												   UINT* pBin,
 												   USHORT* pBinModel,
 												   USHORT* pBinMesh,
-												   USHORT* pNumTrisInBin)
+												   USHORT* pNumTrisInBin,
+												   UINT idx)
 {
 	int numLanes = SSE;
+	int laneMask = (1 << numLanes) - 1; 
 	// working on 4 triangles at a time
 	for(UINT index = start; index <= end; index += SSE)
 	{
 		if(index + SSE > end)
 		{
 			numLanes = end - index + 1;
+			laneMask = (1 << numLanes) - 1; 
 		}
 		
 		// storing x,y,z,w for the 3 vertices of 4 triangles = 4*3*4 = 48
-		vFloat4 xformedPos[3];		
-		Gather(xformedPos, index, numLanes);
-		
+		vFloat4 xformedPos[3];
+		Gather(xformedPos, index, numLanes, idx);
+			
 		// TODO: Maybe convert to Fixed pt and store it once so that dont have to convert to fixedPt again during rasterization
-		vFxPt4 xFormedFxPtPos[3];
+		__m128i fxPtX[3], fxPtY[3];	
 		for(int i = 0; i < 3; i++)
 		{
-			xFormedFxPtPos[i].X = _mm_cvtps_epi32(xformedPos[i].X);
-			xFormedFxPtPos[i].Y = _mm_cvtps_epi32(xformedPos[i].Y);
-			xFormedFxPtPos[i].Z = _mm_cvtps_epi32(xformedPos[i].Z);
-			xFormedFxPtPos[i].W = _mm_cvtps_epi32(xformedPos[i].W);
+			fxPtX[i] = _mm_cvtps_epi32(xformedPos[i].X);
+			fxPtY[i] = _mm_cvtps_epi32(xformedPos[i].Y);		
 		}
 
-		// Compute triangle are
-		__m128i A0 = _mm_sub_epi32(xFormedFxPtPos[1].Y, xFormedFxPtPos[2].Y);
-		__m128i B0 = _mm_sub_epi32(xFormedFxPtPos[2].X, xFormedFxPtPos[1].X);
-		__m128i C0 = _mm_sub_epi32(_mm_mullo_epi32(xFormedFxPtPos[1].X, xFormedFxPtPos[2].Y), _mm_mullo_epi32(xFormedFxPtPos[2].X, xFormedFxPtPos[1].Y));
+		__m128i triArea1 = _mm_sub_epi32(fxPtX[1], fxPtX[0]);
+		triArea1 = _mm_mullo_epi32(triArea1, _mm_sub_epi32(fxPtY[2], fxPtY[0]));
 
-		__m128i triArea = _mm_mullo_epi32(A0, xFormedFxPtPos[0].X);
-		triArea = _mm_add_epi32(triArea, _mm_mullo_epi32(B0, xFormedFxPtPos[0].Y));
-		triArea = _mm_add_epi32(triArea, C0);
+		__m128i triArea2 = _mm_sub_epi32(fxPtX[0], fxPtX[2]);
+		triArea2 = _mm_mullo_epi32(triArea2, _mm_sub_epi32(fxPtY[0], fxPtY[1]));
 
-		__m128 oneOverTriArea = _mm_div_ps(_mm_set1_ps(1.0f), _mm_cvtepi32_ps(triArea));
+		__m128i triArea = _mm_sub_epi32(triArea1, triArea2);
 		
 		// Find bounding box for screen space triangle in terms of pixels
-		__m128i vStartX = Max(Min(Min(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(0));
-		__m128i vEndX   = Min(_mm_add_epi32(Max(Max(xFormedFxPtPos[0].X, xFormedFxPtPos[1].X), xFormedFxPtPos[2].X), _mm_set1_epi32(1)), _mm_set1_epi32(SCREENW));
+		__m128i vStartX = Max(Min(Min(fxPtX[0], fxPtX[1]), fxPtX[2]), _mm_set1_epi32(0));
+		__m128i vEndX   = Min(Max(Max(fxPtX[0], fxPtX[1]), fxPtX[2]), _mm_set1_epi32(SCREENW - 1));
 
-        __m128i vStartY = Max(Min(Min(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(0));
-        __m128i vEndY   = Min(_mm_add_epi32(Max(Max(xFormedFxPtPos[0].Y, xFormedFxPtPos[1].Y), xFormedFxPtPos[2].Y), _mm_set1_epi32(1)), _mm_set1_epi32(SCREENH));
+        __m128i vStartY = Max(Min(Min(fxPtY[0], fxPtY[1]), fxPtY[2]), _mm_set1_epi32(0));
+        __m128i vEndY   = Min(Max(Max(fxPtY[0], fxPtY[1]), fxPtY[2]),  _mm_set1_epi32(SCREENH -1));
 
+		//Figure out which lanes are active
+		__m128i front = _mm_cmpgt_epi32(triArea, _mm_setzero_si128());
+		__m128i nonEmptyX = _mm_cmpgt_epi32(vEndX, vStartX);
+		__m128i nonEmptyY = _mm_cmpgt_epi32(vEndY, vStartY);
+		__m128 accept1 = _mm_castsi128_ps(_mm_and_si128(_mm_and_si128(front, nonEmptyX), nonEmptyY));
 
-		for(int i = 0; i < numLanes; i++)
+		// All verts must be inside the near clip volume
+		__m128 W0 = _mm_cmpgt_ps(xformedPos[0].W, _mm_setzero_ps());
+		__m128 W1 = _mm_cmpgt_ps(xformedPos[1].W, _mm_setzero_ps());
+		__m128 W2 = _mm_cmpgt_ps(xformedPos[2].W, _mm_setzero_ps());
+
+		__m128 accept = _mm_and_ps(_mm_and_ps(accept1, W0), _mm_and_ps(W1, W2));
+		unsigned int triMask = _mm_movemask_ps(accept) & laneMask; 
+			
+		while(triMask)
 		{
-			// Skip triangle if area is zero 
-			if(triArea.m128i_i32[i] <= 0) continue;
-			
-			float oneOverW[3];
-			for(int j = 0; j < 3; j++)
-			{
-				oneOverW[j] = xformedPos[j].W.m128_f32[i];
-			}
-			
-			// Reject the triangle if any of its verts is behind the nearclip plane
-			if(oneOverW[0] > 1.0f || oneOverW[1] > 1.0f || oneOverW[2] > 1.0f) continue;
-
+			int i = FindClearLSB(&triMask);
+				
 			// Convert bounding box in terms of pixels to bounding box in terms of tiles
 			int startX = max(vStartX.m128i_i32[i]/TILE_WIDTH_IN_PIXELS, 0);
 			int endX   = min(vEndX.m128i_i32[i]/TILE_WIDTH_IN_PIXELS, SCREENW_IN_TILES-1);
-
 			int startY = max(vStartY.m128i_i32[i]/TILE_HEIGHT_IN_PIXELS, 0);
 			int endY   = min(vEndY.m128i_i32[i]/TILE_HEIGHT_IN_PIXELS, SCREENH_IN_TILES-1);
 
@@ -256,7 +265,7 @@ void TransformedMeshSSE::BinTransformedTrianglesMT(UINT taskId,
 				int offset2 = YOFFSET2_MT * row;
 				for(col = startX; col <= endX; col++)
 				{
-					int idx1 = offset1 + (XOFFSET1_MT * col) + taskId;
+					int idx1 = offset1 + (XOFFSET1_MT * col) + (TOFFSET1_MT * taskId);
 					int idx2 = offset2 + (XOFFSET2_MT * col) + (taskId * MAX_TRIS_IN_BIN_MT) + pNumTrisInBin[idx1];
 					pBin[idx2] = index + i;
 					pBinModel[idx2] = modelId;
@@ -269,15 +278,11 @@ void TransformedMeshSSE::BinTransformedTrianglesMT(UINT taskId,
 }
 
 
-void TransformedMeshSSE::GetOneTriangleData(float* xformedPos, UINT triId, UINT lane)
+void TransformedMeshSSE::GetOneTriangleData(__m128 xformedPos[3], UINT triId, UINT idx)
 {
-	vFloat4* pOut = (vFloat4*) xformedPos;
+	const UINT *inds = &mpIndices[triId * 3];
 	for(int i = 0; i < 3; i++)
 	{
-		UINT index = mpIndices[(triId * 3) + i];
-		(pOut + i)->X.m128_f32[lane] = mpXformedPos[index].m128_f32[0];
-		(pOut + i)->Y.m128_f32[lane] = mpXformedPos[index].m128_f32[1];
-		(pOut + i)->Z.m128_f32[lane] = mpXformedPos[index].m128_f32[2];
-		(pOut + i)->W.m128_f32[lane] = mpXformedPos[index].m128_f32[3];
+		xformedPos[i] = mpXformedPos[idx][inds[i]];
 	}
 }

@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -20,17 +20,21 @@
 AABBoxRasterizerScalar::AABBoxRasterizerScalar()
 	: mNumModels(0),
 	  mpTransformedAABBox(NULL),
+	  mpModels(NULL),
 	  mpNumTriangles(NULL),
-	  mViewMatrix(NULL),
-	  mProjMatrix(NULL),
-	  mpRenderTargetPixels(NULL),
-	  mpCamera(NULL),
-	  mpVisible(NULL),
-	  mNumCulled(0),
 	  mOccludeeSizeThreshold(0.0f),
 	  mNumDepthTestTasks(0),
-	  mTimeCounter(0)
+	  mTimeCounter(0),
+	  mEnableFCulling(true)
 {
+	mpCamera[0] = mpCamera[1] = NULL;
+	mpVisible[0] = mpVisible[1] = NULL;
+	mpInsideFrustum[0] = mpInsideFrustum[1] = NULL;
+
+	mpRenderTargetPixels[0] = NULL;
+	mpRenderTargetPixels[1] = NULL;
+	
+	mNumCulled[0] = mNumCulled[1] =NULL;
 	for(UINT i = 0; i < AVG_COUNTER; i++)
 	{
 		mDepthTestTime[i] = 0.0;
@@ -39,9 +43,17 @@ AABBoxRasterizerScalar::AABBoxRasterizerScalar()
 
 AABBoxRasterizerScalar::~AABBoxRasterizerScalar()
 {
-	SAFE_DELETE_ARRAY(mpVisible);
+	for(UINT i = 0; i < mNumModels; i++)
+	{
+		mpModels[i]->Release();
+	}
+	SAFE_DELETE_ARRAY(mpVisible[0]);
+	SAFE_DELETE_ARRAY(mpVisible[1]);
 	SAFE_DELETE_ARRAY(mpTransformedAABBox);
+	SAFE_DELETE_ARRAY(mpInsideFrustum[0]);
+	SAFE_DELETE_ARRAY(mpInsideFrustum[1]);
 	SAFE_DELETE_ARRAY(mpNumTriangles);
+	SAFE_DELETE_ARRAY(mpModels);
 }
 
 //--------------------------------------------------------------------
@@ -67,10 +79,15 @@ void AABBoxRasterizerScalar::CreateTransformedAABBoxes(CPUTAssetSet **pAssetSet,
 		}
 	}
 
-	mpVisible = new bool[mNumModels];
+	mpVisible[0] = new bool[mNumModels];
+	mpVisible[1] = new bool[mNumModels];
 	mpTransformedAABBox = new TransformedAABBoxScalar[mNumModels];
-	mpNumTriangles = new UINT[mNumModels];
+	mpModels = new CPUTModelDX11 *[mNumModels];
+	mpInsideFrustum[0] = new bool[mNumModels];
+	mpInsideFrustum[1] = new bool[mNumModels];
 
+	mpNumTriangles = new UINT[mNumModels];
+	
 	for(UINT assetId = 0, modelId = 0; assetId < numAssetSets; assetId++)
 	{
 		for(UINT nodeId = 0; nodeId < pAssetSet[assetId]->GetAssetCount(); nodeId++)
@@ -83,6 +100,9 @@ void AABBoxRasterizerScalar::CreateTransformedAABBoxes(CPUTAssetSet **pAssetSet,
 				CPUTModelDX11 *pModel = (CPUTModelDX11*)pRenderNode;
 				pModel = (CPUTModelDX11*)pRenderNode;
 		
+				mpModels[modelId] = pModel;
+				pModel->AddRef();
+
 				mpTransformedAABBox[modelId].CreateAABBVertexIndexList(pModel);
 				mpNumTriangles[modelId] = 0;
 				for(int meshId = 0; meshId < pModel->GetMeshCount(); meshId++)
@@ -96,10 +116,10 @@ void AABBoxRasterizerScalar::CreateTransformedAABBoxes(CPUTAssetSet **pAssetSet,
 	}
 }
 
-void AABBoxRasterizerScalar::SetViewProjMatrix(float4x4 *viewMatrix, float4x4 *projMatrix)
+void AABBoxRasterizerScalar::SetViewProjMatrix(float4x4 *viewMatrix, float4x4 *projMatrix, UINT idx)
 {
-	mViewMatrix = viewMatrix;
-	mProjMatrix = projMatrix;
+	mViewMatrix[idx] = *viewMatrix;
+	mProjMatrix[idx] = *projMatrix;
 }
 
 //------------------------------------------------------------------------
@@ -108,32 +128,20 @@ void AABBoxRasterizerScalar::SetViewProjMatrix(float4x4 *viewMatrix, float4x4 *p
 //-------------------------------------------------------------------------
 void AABBoxRasterizerScalar::RenderVisible(CPUTAssetSet **pAssetSet,
 										   CPUTRenderParametersDX &renderParams,
-										   UINT numAssetSets)
+										   UINT numAssetSets,
+										   UINT idx)
 {
 	int count = 0;
-
-	for(UINT assetId = 0, modelId = 0; assetId < numAssetSets; assetId++)
+	for(UINT modelId = 0; modelId < mNumModels; modelId++)
 	{
-		for(UINT nodeId = 0; nodeId< pAssetSet[assetId]->GetAssetCount(); nodeId++)
+		if(mpVisible[idx][modelId])
 		{
-			CPUTRenderNode* pRenderNode = NULL;
-			CPUTResult result = pAssetSet[assetId]->GetAssetByIndex(nodeId, &pRenderNode);
-			ASSERT((CPUT_SUCCESS == result), _L ("Failed getting asset by index")); 
-			if(pRenderNode->IsModel())
-			{
-				if(mpVisible[modelId])
-				{
-					CPUTModelDX11* model = (CPUTModelDX11*)pRenderNode;
-					model = (CPUTModelDX11*)pRenderNode;
-					model->Render(renderParams);
-					count++;
-				}
-				modelId++;			
-			}
-			pRenderNode->Release();
+			mpModels[modelId]->Render(renderParams);
+			count++;
 		}
-	}	
-	mNumCulled =  mNumModels - count;
+	}
+
+	mNumCulled[idx] =  mNumModels - count;
 }
 
 
@@ -143,9 +151,18 @@ void AABBoxRasterizerScalar::RenderVisible(CPUTAssetSet **pAssetSet,
 //-------------------------------------------------------------------------
 void AABBoxRasterizerScalar::Render(CPUTAssetSet **pAssetSet,
 									CPUTRenderParametersDX &renderParams,
-									UINT numAssetSets)
+									UINT numAssetSets, 
+									UINT idx)
 {
 	int count = 0;
+	int triCount = 0;
+
+	CPUTModelDX11::ResetFCullCount();
+
+	BoxTestSetupScalar setup;
+	setup.Init(mViewMatrix[idx], mProjMatrix[idx], viewportMatrix, mpCamera[idx], mOccludeeSizeThreshold);
+
+	float4x4 cumulativeMatrix;
 
 	for(UINT assetId = 0, modelId = 0; assetId < numAssetSets; assetId++)
 	{
@@ -156,17 +173,22 @@ void AABBoxRasterizerScalar::Render(CPUTAssetSet **pAssetSet,
 			ASSERT((CPUT_SUCCESS == result), _L ("Failed getting asset by index")); 
 			if(pRenderNode->IsModel())
 			{
-				if(!mpTransformedAABBox[modelId].IsTooSmall(mViewMatrix, mProjMatrix, mpCamera))
+				if(!mpTransformedAABBox[modelId].IsTooSmall(setup, cumulativeMatrix))
 				{
 					CPUTModelDX11* model = (CPUTModelDX11*)pRenderNode;
+					ASSERT((model != NULL), _L("model is NULL"));
+
 					model = (CPUTModelDX11*)pRenderNode;
 					model->Render(renderParams);
 					count++;
+					triCount += mpNumTriangles[modelId];
 				}
 				modelId++;			
 			}
 			pRenderNode->Release();
 		}
-	}	
-	mNumCulled =  mNumModels - count;
+	}
+	mNumFCullCount = CPUTModelDX11::GetFCullCount();
+	mNumCulled[idx] =  mNumModels - count;
+	mNumTrisRendered = triCount;
 }

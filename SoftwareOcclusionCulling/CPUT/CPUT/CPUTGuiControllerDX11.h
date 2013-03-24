@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -48,6 +48,7 @@ const CPUTControlID ID_CPUT_GUI_FPS_COUNTER = 4000000201;        // pick very ra
 #include <d3d11.h>
 #include <xnamath.h> // for xmmatrix/et al
 
+const int AVG_FRAMES = 30;
 
 // the GUI controller class that dispatches the rendering calls to all the buttons
 //--------------------------------------------------------------------------------
@@ -149,6 +150,8 @@ private:
 
     // members for saving render state before/after drawing gui
     D3D11_PRIMITIVE_TOPOLOGY    mTopology;
+	float mFPSAvg[AVG_FRAMES];
+	UINT mFPSInst;
 
     // helper functions
     CPUTGuiControllerDX11();    // singleton

@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -133,7 +133,7 @@ public:
         mSyncInterval(1),    // start with vsync on
         mpPerFrameConstantBuffer(NULL)
     {
-		mpTimer = (CPUTTimer*) new CPUTTimerWin();
+        mpTimer = (CPUTTimer*) new CPUTTimerWin();
         gpSample = this;
     }
     virtual ~CPUT_DX11();
@@ -152,9 +152,9 @@ public:
     virtual void ResizeWindow(UINT width, UINT height);
     virtual void ResizeWindowSoft(UINT width, UINT height);
     void DeviceShutdown();
-	void RestartCPUT();
+    void RestartCPUT();
 
-    void SetPerFrameConstantBuffer( double totalSeconds );
+    void UpdatePerFrameConstantBuffer( double totalSeconds );
     void InnerExecutionLoop();
 
     // events
@@ -167,6 +167,7 @@ public:
     virtual void ReleaseSwapChain() {}
     // virtual void ResizeWindow(UINT width, UINT height){UNREFERENCED_PARAMETER(width);UNREFERENCED_PARAMETER(height);}
     virtual CPUTResult CreateContext();
+    ID3D11DeviceContext *GetContext() { return mpContext; }
 
     // GUI
     void CPUTDrawGUI();

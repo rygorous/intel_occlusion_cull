@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -21,76 +21,103 @@ DepthBufferRasterizerScalarST::DepthBufferRasterizerScalarST()
 	: DepthBufferRasterizerScalar()
 {
 	int size = SCREENH_IN_TILES * SCREENW_IN_TILES;
-	mpBin = new UINT[size * MAX_TRIS_IN_BIN_ST];
-	mpBinModel = new USHORT[size * MAX_TRIS_IN_BIN_ST];
-	mpBinMesh = new USHORT[size * MAX_TRIS_IN_BIN_ST];
-	mpNumTrisInBin = new USHORT[size];
+	mpBin[0] = new UINT[size * MAX_TRIS_IN_BIN_ST];
+	mpBinModel[0] = new USHORT[size * MAX_TRIS_IN_BIN_ST];
+	mpBinMesh[0] = new USHORT[size * MAX_TRIS_IN_BIN_ST];
+	mpNumTrisInBin[0] = new USHORT[size];
+
+	mpBin[1] = new UINT[size * MAX_TRIS_IN_BIN_ST];
+	mpBinModel[1] = new USHORT[size * MAX_TRIS_IN_BIN_ST];
+	mpBinMesh[1] = new USHORT[size * MAX_TRIS_IN_BIN_ST];
+	mpNumTrisInBin[1] = new USHORT[size];
 }
 
 DepthBufferRasterizerScalarST::~DepthBufferRasterizerScalarST()
 {
-	SAFE_DELETE_ARRAY(mpBin);
-	SAFE_DELETE_ARRAY(mpBinModel);
-	SAFE_DELETE_ARRAY(mpBinMesh);
-	SAFE_DELETE_ARRAY(mpNumTrisInBin);
-}
+	SAFE_DELETE_ARRAY(mpBin[0]);
+	SAFE_DELETE_ARRAY(mpBinModel[0]);
+	SAFE_DELETE_ARRAY(mpBinMesh[0]);
+	SAFE_DELETE_ARRAY(mpNumTrisInBin[0]);
 
-//------------------------------------------------------------
-// * Determine if the occludee model is inside view frustum
-//------------------------------------------------------------
-void DepthBufferRasterizerScalarST::IsVisible(CPUTCamera* pCamera)
-{
-	mpCamera = pCamera;
-	
-	for(UINT i = 0; i < mNumModels1; i++)
-	{
-		mpTransformedModels1[i].IsVisible(mpCamera);
-	}
+	SAFE_DELETE_ARRAY(mpBin[1]);
+	SAFE_DELETE_ARRAY(mpBinModel[1]);
+	SAFE_DELETE_ARRAY(mpBinMesh[1]);
+	SAFE_DELETE_ARRAY(mpNumTrisInBin[1]);
 }
 
 //------------------------------------------------------------------------------
+// * Determine if the occludee model is inside view frustum
 // * Transform the occluder models on the CPU
 // * Bin the occluder triangles into tiles that the frame buffer is divided into
 // * Rasterize the occluder triangles to the CPU depth buffer
 //-------------------------------------------------------------------------------
-void DepthBufferRasterizerScalarST::TransformModelsAndRasterizeToDepthBuffer()
+void DepthBufferRasterizerScalarST::TransformModelsAndRasterizeToDepthBuffer(CPUTCamera *pCamera, UINT idx)
 {
-	mRasterizeTimer.StartTimer();
-	
-	TransformMeshes();
-	BinTransformedMeshes();
+	QueryPerformanceCounter(&mStartTime[idx]);
+	mpCamera[idx] = pCamera;
+
+	BoxTestSetupScalar setup;
+	setup.Init(mpViewMatrix[idx], mpProjMatrix[idx], viewportMatrix, mpCamera[idx], mOccluderSizeThreshold); 
+
+	if(mEnableFCulling)
+	{
+		for(UINT i = 0; i < mNumModels1; i++)
+		{
+			mpTransformedModels1[i].InsideViewFrustum(setup, idx);
+		}
+	}
+	else
+	{
+		for(UINT i = 0; i < mNumModels1; i++)
+		{
+			mpTransformedModels1[i].TooSmall(setup, idx);
+		}
+	}
+
+	ActiveModels(idx);
+	TransformMeshes(idx);
+	BinTransformedMeshes(idx);
 	for(UINT i = 0; i < NUM_TILES; i++)
 	{
-		RasterizeBinnedTrianglesToDepthBuffer(i);
+		RasterizeBinnedTrianglesToDepthBuffer(i, idx);
 	}
 
-	mRasterizeTime[mTimeCounter++] = mRasterizeTimer.StopTimer();
+	QueryPerformanceCounter(&mStopTime[idx][0]);
+	mRasterizeTime[mTimeCounter++] = ((double)(mStopTime[idx][0].QuadPart - mStartTime[idx].QuadPart)) / ((double)glFrequency.QuadPart);
 	mTimeCounter = mTimeCounter >= AVG_COUNTER ? 0 : mTimeCounter;
+}
 
-	mNumRasterized = 0;
-	for(UINT i = 0; i < mNumModels1; i++)
+void DepthBufferRasterizerScalarST::ActiveModels(UINT idx)
+{
+	ResetActive(idx);
+	for (UINT i = 0; i < mNumModels1; i++)
 	{
-		mNumRasterized += mpTransformedModels1[i].IsRasterized2DB() ? 1 : 0;
+		if(mpTransformedModels1[i].IsRasterized2DB(idx))
+		{
+			Activate(i, idx);
+		}
 	}
 }
+
 
 //-------------------------------------------------------------------
 // Trasforms the occluder vertices to screen space once every frame
 //-------------------------------------------------------------------
-void DepthBufferRasterizerScalarST::TransformMeshes()
+void DepthBufferRasterizerScalarST::TransformMeshes(UINT idx)
 {
-	for(UINT ss = 0; ss < mNumModels1; ss++)
+	for(UINT active = 0; active < mNumModelsA[idx]; active++)
     {
+		UINT ss = mpModelIndexA[idx][active];
 		UINT thisSurfaceVertexCount = mpTransformedModels1[ss].GetNumVertices();
         
-        mpTransformedModels1[ss].TransformMeshes(mViewMatrix, mProjMatrix, 0, thisSurfaceVertexCount - 1, mpCamera);	
+        mpTransformedModels1[ss].TransformMeshes(0, thisSurfaceVertexCount - 1, mpCamera[idx], idx);	
     }
 }
 
 //-------------------------------------------------
 // Bins the transformed triangles into tiles
 //-------------------------------------------------
-void DepthBufferRasterizerScalarST::BinTransformedMeshes()
+void DepthBufferRasterizerScalarST::BinTransformedMeshes(UINT idx)
 {
 	// Reset the bin count.  Note the data layout makes this traversal a bit awkward.
     // We can't just use memset() because the last array index isn't what's varying.
@@ -101,16 +128,17 @@ void DepthBufferRasterizerScalarST::BinTransformedMeshes()
         for(UINT xx = 0; xx < SCREENW_IN_TILES; xx++)
         {
 			UINT index = offset + (XOFFSET1_ST * xx);
-            mpNumTrisInBin[index] = 0;
+            mpNumTrisInBin[idx][index] = 0;
 	    }
     }
 
 	// Now, process all of the surfaces that contain this task's triangle range.
-	for(UINT ss = 0; ss < mNumModels1; ss++)
+	for(UINT active = 0; active < mNumModelsA[idx]; active++)
     {
+		UINT ss = mpModelIndexA[idx][active];
 		UINT thisSurfaceTriangleCount = mpTransformedModels1[ss].GetNumTriangles();
         
-        mpTransformedModels1[ss].BinTransformedTrianglesST(0, ss, 0, thisSurfaceTriangleCount - 1, mpBin, mpBinModel, mpBinMesh, mpNumTrisInBin);
+        mpTransformedModels1[ss].BinTransformedTrianglesST(0, ss, 0, thisSurfaceTriangleCount - 1, mpBin[idx], mpBinModel[idx], mpBinMesh[idx], mpNumTrisInBin[idx], idx);
 	}
 }
 
@@ -118,10 +146,9 @@ void DepthBufferRasterizerScalarST::BinTransformedMeshes()
 // For each tile go through all the bins and process all the triangles in it.
 // Rasterize each triangle to the CPU depth buffer. 
 //-------------------------------------------------------------------------------
-void DepthBufferRasterizerScalarST::RasterizeBinnedTrianglesToDepthBuffer(UINT tileId)
+void DepthBufferRasterizerScalarST::RasterizeBinnedTrianglesToDepthBuffer(UINT tileId, UINT idx)
 {
-	int fxptZero = 0;
-	float* pDepthBuffer = (float*)mpRenderTargetPixels; 
+	float* pDepthBuffer = (float*)mpRenderTargetPixels[idx]; 
 
 	// Based on TaskId determine which tile to process
 	UINT screenWidthInTiles = SCREENW/TILE_WIDTH_IN_PIXELS;
@@ -129,21 +156,23 @@ void DepthBufferRasterizerScalarST::RasterizeBinnedTrianglesToDepthBuffer(UINT t
     UINT tileY = tileId / screenWidthInTiles;
 
     int tileStartX = tileX * TILE_WIDTH_IN_PIXELS;
-	int tileEndX   = tileStartX + TILE_WIDTH_IN_PIXELS;
+	int tileEndX   = tileStartX + TILE_WIDTH_IN_PIXELS - 1;
 	
 	int tileStartY = tileY * TILE_HEIGHT_IN_PIXELS;
-	int tileEndY   = tileStartY + TILE_HEIGHT_IN_PIXELS;
+	int tileEndY   = tileStartY + TILE_HEIGHT_IN_PIXELS - 1;
 
 	UINT bin = 0;
 	UINT binIndex = 0;
 	UINT offset1 = YOFFSET1_ST * tileY + XOFFSET1_ST * tileX;
 	UINT offset2 = YOFFSET2_ST * tileY + XOFFSET2_ST * tileX;
-	UINT numTrisInBin = mpNumTrisInBin[offset1 + bin];
+	UINT numTrisInBin = mpNumTrisInBin[idx][offset1 + bin];
+
+	ClearDepthTile(tileStartX, tileStartY, tileEndX + 1, tileEndY + 1, idx);
 
 	float4 xformedPos[3];
 	bool done = false;
 	bool allBinsEmpty = true;
-	mNumRasterizedTris[tileId] = numTrisInBin;
+	mNumRasterizedTris[idx][tileId] = numTrisInBin;
 
 	while(!done)
 	{
@@ -155,18 +184,18 @@ void DepthBufferRasterizerScalarST::RasterizeBinnedTrianglesToDepthBuffer(UINT t
 			{
 				break;
 			}
-			numTrisInBin = mpNumTrisInBin[offset1 + bin];
-			mNumRasterizedTris[tileId] += numTrisInBin;
+			numTrisInBin = mpNumTrisInBin[idx][offset1 + bin];
+			mNumRasterizedTris[idx][tileId] += numTrisInBin;
 			binIndex = 0; // Slightly inefficient.  We set it every time through this loop.  Could do only once.
 		}
 		if(!numTrisInBin)
 		{
 			break; // No more tris in the bins
 		}
-		USHORT modelId = mpBinModel[offset2 + bin * MAX_TRIS_IN_BIN_ST + binIndex];
-		USHORT meshId = mpBinMesh[offset2 + bin * MAX_TRIS_IN_BIN_ST + binIndex];
-		UINT triIdx = mpBin[offset2 + bin * MAX_TRIS_IN_BIN_ST + binIndex];
-		mpTransformedModels1[modelId].Gather((float*)xformedPos, meshId, triIdx, 0);
+		USHORT modelId = mpBinModel[idx][offset2 + bin * MAX_TRIS_IN_BIN_ST + binIndex];
+		USHORT meshId = mpBinMesh[idx][offset2 + bin * MAX_TRIS_IN_BIN_ST + binIndex];
+		UINT triIdx = mpBin[idx][offset2 + bin * MAX_TRIS_IN_BIN_ST + binIndex];
+		mpTransformedModels1[modelId].Gather((float*)xformedPos, meshId, triIdx, idx);
 		allBinsEmpty = false;
 		
 		++binIndex;
@@ -180,61 +209,57 @@ void DepthBufferRasterizerScalarST::RasterizeBinnedTrianglesToDepthBuffer(UINT t
 		}
 
 		// use fixed-point only for X and Y.  Avoid work for Z and W.
-        int4 xformedPosFxPt[3] = {
-            int4(xformedPos[0]),
-            int4(xformedPos[1]),
-            int4(xformedPos[2])
-        };
+        int fxPtX[3], fxPtY[3];
+		float Z[3];
+		for(UINT i = 0; i < 3; i++)
+		{
+			fxPtX[i] = (int)(xformedPos[i].x + 0.5);
+			fxPtY[i] = (int)(xformedPos[i].y + 0.5);
+			Z[i] = xformedPos[i].z;
+		}
 
 		// Fab(x, y) =     Ax       +       By     +      C              = 0
 		// Fab(x, y) = (ya - yb)x   +   (xb - xa)y + (xa * yb - xb * ya) = 0
 		// Compute A = (ya - yb) for the 3 line segments that make up each triangle
-		int A0 = xformedPosFxPt[1].y - xformedPosFxPt[2].y;
-		int A1 = xformedPosFxPt[2].y - xformedPosFxPt[0].y;
-		int A2 = xformedPosFxPt[0].y - xformedPosFxPt[1].y;
+		int A0 = fxPtY[1] - fxPtY[2];
+		int A1 = fxPtY[2] - fxPtY[0];
+		int A2 = fxPtY[0] - fxPtY[1];
 
 		// Compute B = (xb - xa) for the 3 line segments that make up each triangle
-		int B0 = xformedPosFxPt[2].x - xformedPosFxPt[1].x;
-		int B1 = xformedPosFxPt[0].x - xformedPosFxPt[2].x;
-		int B2 = xformedPosFxPt[1].x - xformedPosFxPt[0].x;
+		int B0 = fxPtX[2] - fxPtX[1];
+		int B1 = fxPtX[0] - fxPtX[2];
+		int B2 = fxPtX[1] - fxPtX[0];
 
 		// Compute C = (xa * yb - xb * ya) for the 3 line segments that make up each triangle
-		int C0 = xformedPosFxPt[1].x * xformedPosFxPt[2].y - xformedPosFxPt[2].x * xformedPosFxPt[1].y;
-		int C1 = xformedPosFxPt[2].x * xformedPosFxPt[0].y - xformedPosFxPt[0].x * xformedPosFxPt[2].y;
-		int C2 = xformedPosFxPt[0].x * xformedPosFxPt[1].y - xformedPosFxPt[1].x * xformedPosFxPt[0].y;
+		int C0 = fxPtX[1] * fxPtY[2] - fxPtX[2] * fxPtY[1];
+		int C1 = fxPtX[2] * fxPtY[0] - fxPtX[0] * fxPtY[2];
+		int C2 = fxPtX[0] * fxPtY[1] - fxPtX[1] * fxPtY[0];
 
 		// Compute triangle area
-		int triArea = A0 * xformedPosFxPt[0].x + B0 * xformedPosFxPt[0].y + C0;
+		int triArea = (fxPtX[1] - fxPtX[0]) * (fxPtY[2] - fxPtY[0]) - (fxPtX[0] - fxPtX[2]) * (fxPtY[0] - fxPtY[1]);
 		float oneOverTriArea = (1.0f/float(triArea));
 
+		Z[1] = (Z[1] - Z[0]) * oneOverTriArea;
+		Z[2] = (Z[2] - Z[0]) * oneOverTriArea;
+
 		// Use bounding box traversal strategy to determine which pixels to rasterize 
-		int startX = max(min(min(xformedPosFxPt[0].x, xformedPosFxPt[1].x), xformedPosFxPt[2].x), tileStartX) & int(0xFFFFFFFE);
-		int endX   = min(max(max(xformedPosFxPt[0].x, xformedPosFxPt[1].x), xformedPosFxPt[2].x) + 1, tileEndX);
+		int startX = max(min(min(fxPtX[0], fxPtX[1]), fxPtX[2]), tileStartX) & int(0xFFFFFFFE);
+		int endX   = min(max(max(fxPtX[0], fxPtX[1]), fxPtX[2]), tileEndX+1);
 
-		int startY = max(min(min(xformedPosFxPt[0].y, xformedPosFxPt[1].y), xformedPosFxPt[2].y), tileStartY) & int(0xFFFFFFFE);
-		int endY   = min(max(max(xformedPosFxPt[0].y, xformedPosFxPt[1].y), xformedPosFxPt[2].y) + 1, tileEndY);
+		int startY = max(min(min(fxPtY[0], fxPtY[1]), fxPtY[2]), tileStartY) & int(0xFFFFFFFE);
+		int endY   = min(max(max(fxPtY[0], fxPtY[1]), fxPtY[2]), tileEndY+1);
 
-		// Extract this triangle's properties from the SIMD versions
-        float zz[3], oneOverW[3];
-		for(int vv = 0; vv < 3; vv++)
-		{
-			zz[vv] = xformedPos[vv].z;
-			oneOverW[vv] = xformedPos[vv].w;
-		}
-
-		zz[0] *= oneOverTriArea;
-		zz[1] *= oneOverTriArea;
-		zz[2] *= oneOverTriArea;
-			
 		int rowIdx = (startY * SCREENW + startX);
 		int col = startX;
 		int row = startY;
 		
+		// Incrementally compute Fab(x, y) for all the pixels inside the bounding box formed by (startX, endX) and (startY, endY)
 		int alpha0 = (A0 * col) + (B0 * row) + C0;
 		int beta0 = (A1 * col) + (B1 * row) + C1;
 		int gama0 = (A2 * col) + (B2 * row) + C2;
 
-		// Incrementally compute Fab(x, y) for all the pixels inside the bounding box formed by (startX, endX) and (startY, endY)
+		float zx = A1 * Z[1] + A2 * Z[2];
+
 		for(int r = startY; r < endY; r++,
 									  row++,
 									  rowIdx = rowIdx + SCREENW,
@@ -243,36 +268,33 @@ void DepthBufferRasterizerScalarST::RasterizeBinnedTrianglesToDepthBuffer(UINT t
 									  gama0 += B2)									 
 		{
 			// Compute barycentric coordinates 
-			int idx = rowIdx;
+			int index = rowIdx;
 			int alpha = alpha0;
 			int beta = beta0;
 			int gama = gama0;
+
+			float depth = Z[0] + Z[1] * beta + Z[2] * gama;
 			
 			for(int c = startX; c < endX; c++,
-   										  idx++,
-										  alpha = alpha + A0,
-										  beta  = beta  + A1,
-										  gama  = gama  + A2)
+   										  index++,
+										  alpha += A0,
+										  beta  += A1,
+										  gama  += A2,
+										  depth += zx)
 			{
 				//Test Pixel inside triangle
-				int mask = fxptZero < (alpha | beta | gama) ? 1 : 0;
+				int mask = alpha | beta | gama;
 					
-				// Early out if all of this quad's pixels are outside the triangle.
-				if((mask & mask) == 0)
-				{
-					continue;
-				}
-
-				// Compute barycentric-interpolated depth
-			    float depth = (alpha * zz[0]) + (beta * zz[1]) + (gama * zz[2]);
-				float previousDepthValue = pDepthBuffer[idx];
+				float previousDepthValue = pDepthBuffer[index];
+				float mergedDepth = max(depth, previousDepthValue);				
+				float finaldepth = mask < 0 ? previousDepthValue : mergedDepth;
 				
-				int depthMask = (depth >= previousDepthValue) ? 1 : 0;
-				int finalMask = mask & depthMask;
-
-				depth = finalMask == 1 ? depth : previousDepthValue;
-				pDepthBuffer[idx] = depth;
+				pDepthBuffer[index] = finaldepth;
 			}//for each column											
 		}// for each row
-	}// for each triangle
+	}// for each triangle*/
+}
+
+void DepthBufferRasterizerScalarST::ComputeR2DBTime(UINT idx)
+{
 }

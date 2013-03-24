@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -27,33 +27,44 @@ class DepthBufferRasterizerSSE : public DepthBufferRasterizer, public HelperSSE
 		virtual ~DepthBufferRasterizerSSE();
 		
 		void CreateTransformedModels(CPUTAssetSet **pAssetSet, UINT numAssetSets);
+
+		// start inclusive, end exclusive
+		void ClearDepthTile(int startX, int startY, int endX, int endY, UINT idx);
 		
 		// Reset all models to be visible when frustum culling is disabled 
 		inline void ResetInsideFrustum()
 		{
 			for(UINT i = 0; i < mNumModels1; i++)
 			{
-				mpTransformedModels1[i].SetVisible(true);
+				mpTransformedModels1[i].SetInsideFrustum(true, 0);
+				mpTransformedModels1[i].SetInsideFrustum(true, 1);
 			}
 		}
 
 		// Set the view and projection matrices
-		inline void SetViewProj(float4x4 *viewMatrix, float4x4 *projMatrix);
+		inline void SetViewProj(float4x4 *viewMatrix, float4x4 *projMatrix, UINT idx);
 		
-		inline void SetCPURenderTargetPixels(UINT *pRenderTargetPixels){mpRenderTargetPixels = pRenderTargetPixels;}
-		
-		inline void SetCamera(CPUTCamera *pCamera) {mpCamera = pCamera;}
-
-		inline void SetOccluderSizeThreshold(float occluderSizeThreshold)
+		inline void SetCPURenderTargetPixels(UINT *pRenderTargetPixels, UINT idx)
 		{
-			for(UINT i = 0; i < mNumModels1; i++)
-			{
-				mpTransformedModels1[i].SetOccluderSizeThreshold(occluderSizeThreshold);
-			}
+			mpRenderTargetPixels[idx] = pRenderTargetPixels;
 		}
+		
+		inline void SetCamera(CPUTCamera *pCamera, UINT idx) {mpCamera[idx] = pCamera;}
+
+		inline void SetOccluderSizeThreshold(float occluderSizeThreshold) {mOccluderSizeThreshold = occluderSizeThreshold;}
+
+		inline void SetEnableFCulling(bool enableFCulling) {mEnableFCulling = enableFCulling;}
 
 		inline UINT GetNumOccluders() {return mNumModels1;}
-		inline UINT GetNumOccludersR2DB(){return mNumRasterized;}
+		inline UINT GetNumOccludersR2DB(UINT idx)
+		{
+			mNumRasterized[idx] = 0;
+			for(UINT i = 0; i < mNumModels1; i++)
+			{
+				mNumRasterized[idx] += mpTransformedModels1[i].IsRasterized2DB(idx) ? 1 : 0;
+			}
+			return mNumRasterized[idx];
+		}
 		inline double GetRasterizeTime()
 		{
 			double averageTime = 0.0;
@@ -64,14 +75,29 @@ class DepthBufferRasterizerSSE : public DepthBufferRasterizer, public HelperSSE
 			return averageTime / AVG_COUNTER;
 		}
 		inline UINT GetNumTriangles(){return mNumTriangles1;}
-		inline UINT GetNumRasterizedTriangles() 
+		inline UINT GetNumRasterizedTriangles(UINT idx) 
 		{
 			UINT numRasterizedTris = 0;
 			for(UINT i = 0; i < NUM_TILES; i++)
 			{
-				numRasterizedTris += mNumRasterizedTris[i];
+				numRasterizedTris += mNumRasterizedTris[idx][i];
 			}
 			return numRasterizedTris;
+		}
+
+		inline void ResetActive(UINT idx)
+		{
+			mNumModelsA[idx] = mNumVerticesA[idx] = mNumTrianglesA[idx] = 0;
+		}
+
+		inline void Activate(UINT modelId, UINT idx)
+		{
+			UINT activeId = mNumModelsA[idx]++;
+			assert(activeId < mNumModels1);
+
+			mpModelIndexA[idx][activeId] = modelId;
+			mNumVerticesA[idx] += mpStartV1[modelId + 1] - mpStartV1[modelId];
+			mNumTrianglesA[idx] += mpStartT1[modelId + 1] - mpStartT1[modelId];
 		}
 		
 	protected:
@@ -82,21 +108,28 @@ class DepthBufferRasterizerSSE : public DepthBufferRasterizer, public HelperSSE
 		UINT *mpStartT1;
 		UINT mNumVertices1;
 		UINT mNumTriangles1;
-		UINT mNumRasterizedTris[NUM_TILES];
-		__m128 *mpXformedPos1;
-		CPUTCamera *mpCamera;
-		__m128 *mViewMatrix;
-		__m128 *mProjMatrix;
-		UINT *mpRenderTargetPixels;
-		UINT mNumRasterized;
-		UINT *mpBin;				 // triangle index
-		USHORT *mpBinModel;			 // model index
-		USHORT *mpBinMesh;			 // mesh index
-		USHORT *mpNumTrisInBin;      // number of triangles in the bin
+		UINT mNumRasterizedTris[2][NUM_TILES];
+		__m128 *mpXformedPos[2];
+		CPUTCamera *mpCamera[2];
+		__m128 *mpViewMatrix[2];
+		__m128 *mpProjMatrix[2];
+		UINT *mpRenderTargetPixels[2];
+		UINT mNumRasterized[2];
+		UINT *mpBin[2];				 // triangle index
+		USHORT *mpBinModel[2];			 // model index
+		USHORT *mpBinMesh[2];			 // mesh index
+		USHORT *mpNumTrisInBin[2];      // number of triangles in the bin
 		UINT mTimeCounter;
 
+		UINT *mpModelIndexA[2]; // 'active' models = visible and not too small
+		UINT mNumModelsA[2];
+		UINT mNumVerticesA[2];
+		UINT mNumTrianglesA[2];
+
+		float mOccluderSizeThreshold;
+
+		bool   mEnableFCulling;
 		double mRasterizeTime[AVG_COUNTER];
-		CPUTTimerWin mRasterizeTimer;
 };
 
 #endif  //DEPTHBUFFERRASTERIZERSSE_H

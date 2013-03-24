@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -184,7 +184,6 @@ public:
         return (CPUTMaterial*) FindAsset( name, pModel?mpInstancedMaterialList:mpMaterialList,         nameIsFullPathAndFilename, pModel, meshIndex );
     }
 
-
     // If the asset exists, these 'Get' methods will addref and return it.  Otherwise,
     // they will create it and return it.
     CPUTAssetSet         *GetAssetSet(        const cString &name, bool nameIsFullPathAndFilename=false );
@@ -201,7 +200,6 @@ public:
 protected:
     // helper functions
     void ReleaseList(CPUTAssetListEntry *pLibraryRoot);
-    void DeleteListEntries(CPUTAssetListEntry *pLibraryRoot);
     void AddAsset( const cString &name, void *pAsset, CPUTAssetListEntry **pHead, CPUTAssetListEntry **pTail, const CPUTModel *pModel=NULL, int meshIndex=-1 );
     void AddAssetInstance( const cString &name, void *pAsset, CPUTAssetListEntry **pHead, CPUTAssetListEntry **pTail, CPUTAssetListEntry **pInstanceHead, CPUTAssetListEntry **pInstanceTail, const CPUTModel *pModel=NULL, int meshIndex=-1 );
 

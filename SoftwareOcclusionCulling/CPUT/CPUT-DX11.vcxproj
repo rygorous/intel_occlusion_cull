@@ -267,7 +267,6 @@
     <ClCompile Include="CPUT\CPUTAssetLibraryDX11.cpp" />
     <ClCompile Include="CPUT\CPUTAssetSet.cpp" />
     <ClCompile Include="CPUT\CPUTAssetSetDX11.cpp" />
-    <ClCompile Include="CPUT\CPUTBuffer.cpp" />
     <ClCompile Include="CPUT\CPUTBufferDX11.cpp" />
     <ClCompile Include="CPUT\CPUTButton.cpp" />
     <ClCompile Include="CPUT\CPUTCheckbox.cpp" />

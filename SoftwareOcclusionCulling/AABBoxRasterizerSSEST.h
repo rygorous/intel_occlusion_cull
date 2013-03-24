@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -26,8 +26,9 @@ class AABBoxRasterizerSSEST : public AABBoxRasterizerSSE
 		AABBoxRasterizerSSEST();
 		~AABBoxRasterizerSSEST();
 
-		void IsInsideViewFrustum(CPUTCamera *pCamera);
-		void TransformAABBoxAndDepthTest();
+		void TransformAABBoxAndDepthTest(CPUTCamera *pCamera, UINT idx);
+		void WaitForTaskToFinish(UINT idx);
+		void ReleaseTaskHandles(UINT idx);
 };
 
 #endif //AABBOXRASTERIZERSSEST_H

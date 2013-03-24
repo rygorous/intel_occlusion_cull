@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -20,11 +20,8 @@
 #include "CPUTTextureDX11.h"
 #include "CPUTBufferDX11.h"
 
-//-----------------------------------------------------------------------------
-CPUTModelDX11::~CPUTModelDX11(){
-    SAFE_RELEASE(mpCPUTConstantBuffer);
-    SAFE_RELEASE(mpModelConstantBuffer);
-}
+ID3D11Buffer *CPUTModelDX11::mpModelConstantBuffer = NULL;
+UINT CPUTModelDX11::mFCullCount = 0;
 
 // Return the mesh at the given index (cast to the GFX api version of CPUTMeshDX11)
 //-----------------------------------------------------------------------------
@@ -37,39 +34,41 @@ float3 gLightDir = float3(0.7f, -0.5f, -0.1f);
 
 // Set the render state before drawing this object
 //-----------------------------------------------------------------------------
-void CPUTModelDX11::SetRenderStates(CPUTRenderParameters &renderParams)
+void CPUTModelDX11::UpdateShaderConstants(CPUTRenderParameters &renderParams)
 {
-    // TODO: need to update the constant buffer only when the model moves.
-    // But, requires individual, per-model constant buffers
     ID3D11DeviceContext *pContext  = ((CPUTRenderParametersDX*)&renderParams)->mpContext;
-
-    CPUTModelConstantBuffer *pCb;
-
-    // update parameters of constant buffer
     D3D11_MAPPED_SUBRESOURCE mapInfo;
     pContext->Map( mpModelConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapInfo );
     {
-        // TODO: remove construction of XMM type
-        XMMATRIX    world((float*)GetWorldMatrix());
-        XMVECTOR    determinant = XMMatrixDeterminant(world);
-        CPUTCamera *pCamera     = gpSample->GetCamera();
-        XMMATRIX    view((float*)pCamera->GetViewMatrix());
-        XMMATRIX    projection((float*)pCamera->GetProjectionMatrix());
-        float      *pCameraPos = (float*)&pCamera->GetPosition();
-        XMVECTOR    cameraPos = XMLoadFloat3(&XMFLOAT3( pCameraPos[0], pCameraPos[1], pCameraPos[2] ));
+        CPUTModelConstantBuffer *pCb = (CPUTModelConstantBuffer*)mapInfo.pData;
 
-        pCb = (CPUTModelConstantBuffer*)mapInfo.pData;
-        pCb->World               = world;
-        pCb->ViewProjection      = view  *projection;
-        pCb->WorldViewProjection = world  *pCb->ViewProjection;
-        pCb->InverseWorld        = XMMatrixInverse(&determinant, XMMatrixTranspose(world));
-        // pCb->LightDirection      = XMVector3Transform(gLightDir, pCb->InverseWorld );
-        // pCb->EyePosition         = XMVector3Transform(cameraPos, pCb->InverseWorld );
-        // TODO: Tell the lights to set their render states
+        // TODO: remove construction of XMM type
+        XMMATRIX     world((float*)GetWorldMatrix());
+        pCb->World = world;
+
+        CPUTCamera *pCamera   = renderParams.mpCamera;
+        XMVECTOR    cameraPos = XMLoadFloat3(&XMFLOAT3( 0.0f, 0.0f, 0.0f ));
+        if( pCamera )
+        {
+            XMMATRIX    view((float*)pCamera->GetViewMatrix());
+            XMMATRIX    projection((float*)pCamera->GetProjectionMatrix());
+            float      *pCameraPos = (float*)&pCamera->GetPosition();
+            cameraPos = XMLoadFloat3(&XMFLOAT3( pCameraPos[0], pCameraPos[1], pCameraPos[2] ));
+
+            // Note: We compute viewProjection to a local to avoid reading from write-combined memory.
+            // The constant buffer uses write-combined memory.  We read this matrix when computing WorldViewProjection.
+            // It is very slow to read it directly from the constant buffer.
+            XMMATRIX viewProjection  = view * projection;
+            pCb->ViewProjection      = viewProjection;
+            pCb->WorldViewProjection = world * viewProjection;
+            XMVECTOR determinant     = XMMatrixDeterminant(world);
+            pCb->InverseWorld        = XMMatrixInverse(&determinant, XMMatrixTranspose(world));
+        }
+        // TODO: Have the lights set their render states?
 
         XMVECTOR lightDirection = XMLoadFloat3(&XMFLOAT3( gLightDir.x, gLightDir.y, gLightDir.z ));
-        pCb->LightDirection      = XMVector3Normalize(lightDirection);
-        pCb->EyePosition         = cameraPos;
+        pCb->LightDirection     = XMVector3Normalize(lightDirection);
+        pCb->EyePosition        = cameraPos;
         float *bbCWS = (float*)&mBoundingBoxCenterWorldSpace;
         float *bbHWS = (float*)&mBoundingBoxHalfWorldSpace;
         float *bbCOS = (float*)&mBoundingBoxCenterObjectSpace;
@@ -93,11 +92,8 @@ void CPUTModelDX11::SetRenderStates(CPUTRenderParameters &renderParams)
 }
 
 // Render - render this model (only)
-extern int gWireFrame;
 //-----------------------------------------------------------------------------
 void CPUTModelDX11::Render(CPUTRenderParameters &renderParams)
-{
-if( gWireFrame != 6 )
 {
     CPUTRenderParametersDX *pParams = (CPUTRenderParametersDX*)&renderParams;
     CPUTCamera             *pCamera = pParams->mpCamera;
@@ -110,42 +106,24 @@ if( gWireFrame != 6 )
 #endif
     if( !renderParams.mDrawModels ) { return; }
 
-    bool isVisible = true;
-    if( gWireFrame != 5 )
-    {
-        isVisible = !pParams->mRenderOnlyVisibleModels || !pCamera || pCamera->mFrustum.IsVisible( mBoundingBoxCenterWorldSpace, mBoundingBoxHalfWorldSpace );
-    }
+    // Update the model's render states only once (and then iterate over materials)
+    UpdateShaderConstants(renderParams);
 
-    // TODO: add world-space bounding box to model so we don't need to do that work every frame
-    // if( !pParams->mRenderOnlyVisibleModels || !pCamera || pCamera->mFrustum.IsVisible( mBoundingBoxCenterWorldSpace, mBoundingBoxHalfWorldSpace ) )
+    bool isVisible = true;
+    isVisible = !pParams->mRenderOnlyVisibleModels || !pCamera || pCamera->mFrustum.IsVisible( mBoundingBoxCenterWorldSpace, mBoundingBoxHalfWorldSpace );
     if( isVisible )
     {
         // loop over all meshes in this model and draw them
         for(UINT ii=0; ii<mMeshCount; ii++)
         {
-if( gWireFrame != 4)
-{
-if( gWireFrame != 1) 
-{
-            CPUTMaterialDX11 *pMaterial = (CPUTMaterialDX11*)(mpMaterial[ii]);
-            pMaterial->SetRenderStates(renderParams);
-}
-
-if( gWireFrame != 2) 
-{
-            // We would like to set the model's render states only once (and then iterate over materials)
-            // But, the material resource lists leave holes for per-model resources (e.g., constant buffers)
-            // We need to 'fixup' the bound resources.  The material sets some to 0, and the model overwrites them with the correct values.
-            SetRenderStates(renderParams);
-}
-if( gWireFrame != 3 )
-{
+            mpMaterial[ii]->SetRenderStates(renderParams);
             ((CPUTMeshDX11*)mpMesh[ii])->Draw(renderParams, this);
-}
-}
         }
     }
-}
+	else
+	{
+		mFCullCount++;
+	}
 }
 
 // Render - render this model (only)
@@ -166,25 +144,19 @@ void CPUTModelDX11::RenderShadow(CPUTRenderParameters &renderParams)
     // TODO: add world-space bounding box to model so we don't need to do that work every frame
     if( !pParams->mRenderOnlyVisibleModels || !pCamera || pCamera->mFrustum.IsVisible( mBoundingBoxCenterWorldSpace, mBoundingBoxHalfWorldSpace ) )
     {
+        // Update the model's render states only once (and then iterate over materials)
+        UpdateShaderConstants(renderParams);
+
+        CPUTMaterialDX11 *pMaterial = (CPUTMaterialDX11*)(mpShadowCastMaterial);
+        pMaterial->SetRenderStates(renderParams);
+
         // loop over all meshes in this model and draw them
         for(UINT ii=0; ii<mMeshCount; ii++)
         {
-            CPUTMaterialDX11 *pMaterial = (CPUTMaterialDX11*)(mpShadowCastMaterial);
-            pMaterial->SetRenderStates(renderParams);
-
-            // We would like to set the model's render states only once (and then iterate over materials)
-            // But, the material resource lists leave holes for per-model resources (e.g., constant buffers)
-            // We need to 'fixup' the bound resources.  The material sets some to 0, and the model overwrites them with the correct values.
-            SetRenderStates(renderParams);
-
-            // Potentially need to use a different vertex-layout object!
-            CPUTVertexShaderDX11 *pVertexShader = pMaterial->GetVertexShader();
             ((CPUTMeshDX11*)mpMesh[ii])->DrawShadow(renderParams, this);
         }
     }
 }
-
-
 
 
 #ifdef SUPPORT_DRAWING_BOUNDING_BOXES
@@ -193,20 +165,35 @@ void CPUTModelDX11::DrawBoundingBox(CPUTRenderParameters &renderParams)
 {
     CPUTRenderParametersDX *pParams = (CPUTRenderParametersDX*)&renderParams;
 
-    SetRenderStates(renderParams);
+    UpdateShaderConstants(renderParams);
     CPUTMaterialDX11 *pMaterial = (CPUTMaterialDX11*)mpBoundingBoxMaterial;
 
-    mpBoundingBoxMaterial->SetRenderStates(renderParams);
-    CPUTVertexShaderDX11 *pVertexShader = pMaterial->GetVertexShader();
+    pMaterial->SetRenderStates(renderParams);
     ((CPUTMeshDX11*)mpBoundingBoxMesh)->Draw(renderParams, this);
 }
 #endif
 
-// Load the set file definition of this object
-// 1. Parse the block of name/parent/transform info for model block
-// 2. Load the model's binary payload (i.e., the meshes)
-// 3. Assert the # of meshes matches # of materials
-// 4. Load each mesh's material
+//-----------------------------------------------------------------------------
+void CPUTModelDX11::CreateModelConstantBuffer()
+{
+    CPUTAssetLibraryDX11 *pAssetLibrary = (CPUTAssetLibraryDX11*)CPUTAssetLibrary::GetAssetLibrary();
+
+    // Create the model constant buffer.
+    HRESULT hr;
+    D3D11_BUFFER_DESC bd = {0};
+    bd.ByteWidth = sizeof(CPUTModelConstantBuffer);
+    bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    bd.Usage = D3D11_USAGE_DYNAMIC;
+    bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    hr = (CPUT_DX11::GetDevice())->CreateBuffer( &bd, NULL, &mpModelConstantBuffer );
+    ASSERT( !FAILED( hr ), _L("Error creating constant buffer.") );
+    CPUTSetDebugName( mpModelConstantBuffer, _L("Model Constant buffer") );
+    cString name = _L("$cbPerModelValues");
+    CPUTBufferDX11 *pBuffer = new CPUTBufferDX11(name, mpModelConstantBuffer);
+    pAssetLibrary->AddConstantBuffer( name, pBuffer );
+    pBuffer->Release(); // We're done with it.  We added it to the library.  Release our reference.
+}
+
 //-----------------------------------------------------------------------------
 CPUTResult CPUTModelDX11::LoadModel(CPUTConfigBlock *pBlock, int *pParentID, CPUTModel *pMasterModel)
 {
@@ -232,19 +219,17 @@ CPUTResult CPUTModelDX11::LoadModel(CPUTConfigBlock *pBlock, int *pParentID, CPU
     LoadParentMatrixFromParameterBlock( pBlock );
 
     // Get the bounding box information
-	float3 center(0.0f), half(0.0f);
+    float3 center(0.0f), half(0.0f);
     pBlock->GetValueByName(_L("BoundingBoxCenter"))->ValueAsFloatArray(center.f, 3);
-	pBlock->GetValueByName(_L("BoundingBoxHalf"))->ValueAsFloatArray(half.f, 3);
+    pBlock->GetValueByName(_L("BoundingBoxHalf"))->ValueAsFloatArray(half.f, 3);
     mBoundingBoxCenterObjectSpace = center;
     mBoundingBoxHalfObjectSpace   = half;
 
-    // the # of meshes in the binary file better match the number of meshes in the .set file definition
     mMeshCount = pBlock->GetValueByName(_L("meshcount"))->ValueAsInt();
     mpMesh     = new CPUTMesh*[mMeshCount];
     mpMaterial = new CPUTMaterial*[mMeshCount];
     memset( mpMaterial, 0, mMeshCount * sizeof(CPUTMaterial*) );
     
-    // get the material names, load them, and match them up with each mesh
     cString materialName;
     char pNumber[4];
     cString materialValueName;
@@ -270,29 +255,6 @@ CPUTResult CPUTModelDX11::LoadModel(CPUTConfigBlock *pBlock, int *pParentID, CPU
         // TODO: Change to use GetModel()
         result = LoadModelPayload(resolvedPathAndFile);
         ASSERT( CPUTSUCCESS(result), _L("Failed loading model") );
-    }
-    // Create the model constant buffer.
-    HRESULT hr;
-    D3D11_BUFFER_DESC bd = {0};
-    bd.ByteWidth = sizeof(CPUTModelConstantBuffer);
-    bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-    bd.Usage = D3D11_USAGE_DYNAMIC;
-    bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-    hr = (CPUT_DX11::GetDevice())->CreateBuffer( &bd, NULL, &mpModelConstantBuffer );
-    ASSERT( !FAILED( hr ), _L("Error creating constant buffer.") );
-    CPUTSetDebugName( mpModelConstantBuffer, _L("Model Constant buffer") );
-    cString name = _L("#cbPerModelValues");
-    mpCPUTConstantBuffer = new CPUTBufferDX11(name, mpModelConstantBuffer);
-    pAssetLibrary->AddConstantBuffer( name, mpCPUTConstantBuffer, this ); // Note: don't include mesh index as this is not mesh dependent
-//    pBuffer->Release(); // We're done with it.  We added it to the library.  Release our reference.
-
-    static CPUTBufferDX11 *pMasterConstBuffer = NULL;
-    if( !pMasterConstBuffer )
-    {
-        name = _L("#cbPerModelValues");
-        pMasterConstBuffer = new CPUTBufferDX11(name, mpModelConstantBuffer);
-        pAssetLibrary->AddConstantBuffer( name, pMasterConstBuffer );
-        pMasterConstBuffer->Release(); // We're done with it.  We added it to the library.  Release our reference.
     }
     
 #if 0
@@ -336,8 +298,6 @@ CPUTResult CPUTModelDX11::LoadModel(CPUTConfigBlock *pBlock, int *pParentID, CPU
         mpMesh[ii]->BindVertexShaderLayout( mpMaterial[ii], mpShadowCastMaterial);
         // mpShadowCastMaterial->Release()
     }
-
-
     return result;
 }
 
@@ -354,13 +314,6 @@ void CPUTModelDX11::SetMaterial(UINT ii, CPUTMaterial *pMaterial)
     {
         pMesh->BindVertexShaderLayout(pMaterial, mpMaterial[ii]);
     }
-}
-
-//-----------------------------------------------------------------------------
-CPUTBuffer *CPUTModelDX11::GetModelConstantBuffer() const
-{
-    mpCPUTConstantBuffer->AddRef();
-    return mpCPUTConstantBuffer;
 }
 
 #ifdef SUPPORT_DRAWING_BOUNDING_BOXES
@@ -422,8 +375,9 @@ void CPUTModelDX11::CreateBoundingBoxMesh()
     if( !mpBoundingBoxMaterialMaster )
     {
         mpBoundingBoxMaterialMaster = CPUTAssetLibrary::GetAssetLibrary()->GetMaterial(_L("BoundingBox"), false, NULL, -3 ); // -1 == mesh independent.  -2 == shadow cast material.  -3 == bounding box.  TODO: how to formalize (enum?)
+        mpBoundingBoxMesh->BindVertexShaderLayout( mpBoundingBoxMaterialMaster,  NULL);
     }
-    mpBoundingBoxMaterial = mpBoundingBoxMaterialMaster->CloneMaterial( _L("BoundingBox"), this, -3 );
-    mpBoundingBoxMesh->BindVertexShaderLayout( mpBoundingBoxMaterial,  NULL);
+    mpBoundingBoxMaterial = mpBoundingBoxMaterialMaster;
+    mpBoundingBoxMaterial->AddRef();
 }
 #endif

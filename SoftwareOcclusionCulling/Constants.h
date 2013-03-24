@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -18,8 +18,29 @@
 #define CONSTANTS_H
 
 #include "CPUTMath.h"
+#include "TaskMgrTBB.h"
 
-extern int gVisualizeDepthBuffer;
+enum SOC_TYPE
+{
+	SCALAR_TYPE,
+	SSE_TYPE,
+};
+
+extern SOC_TYPE gSOCType;
+extern float gOccluderSizeThreshold;
+extern float gOccludeeSizeThreshold;
+extern UINT  gDepthTestTasks;
+
+extern TASKSETHANDLE gInsideViewFrustum[2];
+extern TASKSETHANDLE gTooSmall[2];
+extern TASKSETHANDLE gActiveModels[2];
+extern TASKSETHANDLE gXformMesh[2];
+extern TASKSETHANDLE gBinMesh[2];
+extern TASKSETHANDLE gSortBins[2];
+extern TASKSETHANDLE gRasterize[2];
+extern TASKSETHANDLE gAABBoxDepthTest[2];
+
+extern LARGE_INTEGER glFrequency;
 
 #define PI 3.1415926535f
 
@@ -46,8 +67,9 @@ const int XOFFSET1_ST = 1;
 const int YOFFSET2_ST = SCREENW_IN_TILES * MAX_TRIS_IN_BIN_ST;
 const int XOFFSET2_ST = MAX_TRIS_IN_BIN_ST;
 
-const int YOFFSET1_MT = SCREENW_IN_TILES * NUM_XFORMVERTS_TASKS;
-const int XOFFSET1_MT = NUM_XFORMVERTS_TASKS;
+const int YOFFSET1_MT = SCREENW_IN_TILES;
+const int XOFFSET1_MT = 1;
+const int TOFFSET1_MT = SCREENW_IN_TILES * SCREENH_IN_TILES;
 
 const int YOFFSET2_MT = SCREENW_IN_TILES * NUM_XFORMVERTS_TASKS * MAX_TRIS_IN_BIN_MT;
 const int XOFFSET2_MT = NUM_XFORMVERTS_TASKS * MAX_TRIS_IN_BIN_MT;
@@ -61,14 +83,14 @@ const int AABB_TRIANGLES = 12;
 const float4x4 viewportMatrix(
     0.5f*(float)SCREENW,                 0.0f,  0.0f, 0.0f,
                    0.0f, -0.5f*(float)SCREENH,  0.0f, 0.0f,
-                   0.0f,                 0.0f, -1.0f, 0.0f,
-    0.5f*(float)SCREENW,  0.5f*(float)SCREENH,  1.0f, 1.0f
+                   0.0f,                 0.0f,  1.0f, 0.0f,
+    0.5f*(float)SCREENW,  0.5f*(float)SCREENH,  0.0f, 1.0f
 );
 
-const int OCCLUDER_SETS = 3;
+const int OCCLUDER_SETS = 2;
 const int OCCLUDEE_SETS = 4;
 
 const int AVG_COUNTER = 10;
 
-
+const int NUM_DT_TASKS = 50;
 #endif

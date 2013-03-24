@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -28,41 +28,58 @@ AABBoxRasterizerScalarST::~AABBoxRasterizerScalarST()
 
 }
 
-//--------------------------------------------------------------------
-// Dtermine if the occludee model AABox is within the viewing frustum 
-//--------------------------------------------------------------------
-void AABBoxRasterizerScalarST::IsInsideViewFrustum(CPUTCamera *pCamera)
-{
-	mpCamera = pCamera;
-	
-	for(UINT i = 0; i < mNumModels; i++)
-	{
-		mpTransformedAABBox[i].IsInsideViewFrustum(mpCamera);
-	}
-
-}
-
 //------------------------------------------------------------------------------
 // For each occludee model
+// * Determine if the occludee model AABox is within the viewing frustum 
 // * Transform the AABBox to screen space
 // * Rasterize the triangles that make up the AABBox
 // * Depth test the raterized triangles against the CPU rasterized depth buffer
 //-----------------------------------------------------------------------------
-void AABBoxRasterizerScalarST::TransformAABBoxAndDepthTest()
+void AABBoxRasterizerScalarST::TransformAABBoxAndDepthTest(CPUTCamera *pCamera, UINT idx)
 {
-	mDepthTestTimer.StartTimer();
+	QueryPerformanceCounter(&mStartTime[idx][0]);
+
+	mpCamera[idx] = pCamera;
+	if(mEnableFCulling)
+	{
+		for(UINT i = 0; i < mNumModels; i++)
+		{
+			mpInsideFrustum[idx][i] = mpTransformedAABBox[i].IsInsideViewFrustum(mpCamera[idx]);
+		}
+	}
+
+	BoxTestSetupScalar setup;
+	setup.Init(mViewMatrix[idx], mProjMatrix[idx], viewportMatrix, mpCamera[idx], mOccludeeSizeThreshold);
+
+	float4 xformedPos[AABB_VERTICES];
+	float4x4 cumulativeMatrix;
 
 	for(UINT i = 0; i < mNumModels; i++)
 	{
-		mpVisible[i] = false;
-		mpTransformedAABBox[i].SetVisible(&mpVisible[i]);
+		mpVisible[idx][i] = false;
 		
-		if(mpTransformedAABBox[i].IsInsideViewFrustum() && !mpTransformedAABBox[i].IsTooSmall(mViewMatrix, mProjMatrix, mpCamera))
+		if(mpInsideFrustum[idx][i] && !mpTransformedAABBox[i].IsTooSmall(setup, cumulativeMatrix))
 		{
-			mpTransformedAABBox[i].TransformAABBox();
-			mpTransformedAABBox[i].RasterizeAndDepthTestAABBox(mpRenderTargetPixels);
+			if(mpTransformedAABBox[i].TransformAABBox(xformedPos, cumulativeMatrix))
+			{
+				mpVisible[idx][i] = mpTransformedAABBox[i].RasterizeAndDepthTestAABBox(mpRenderTargetPixels[idx], xformedPos, idx);
+			}
+			else
+			{
+				mpVisible[idx][i] = true;
+			}
 		}		
 	}
-	mDepthTestTime[mTimeCounter++] = mDepthTestTimer.StopTimer();
+
+	QueryPerformanceCounter(&mStopTime[idx][0]);
+	mDepthTestTime[mTimeCounter++] = ((double)(mStopTime[idx][0].QuadPart - mStartTime[idx][0].QuadPart)) / ((double)glFrequency.QuadPart);
 	mTimeCounter = mTimeCounter >= AVG_COUNTER ? 0 : mTimeCounter;
+}
+
+void AABBoxRasterizerScalarST::WaitForTaskToFinish(UINT idx)
+{
+}
+
+void AABBoxRasterizerScalarST::ReleaseTaskHandles(UINT idx)
+{
 }

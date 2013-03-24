@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -22,11 +22,9 @@ TransformedMeshScalar::TransformedMeshScalar()
 	  mNumIndices(0),
 	  mNumTriangles(0),
 	  mpVertices(NULL),
-	  mpIndices(NULL),
-	  mpXformedPos(NULL),
-	  mVertexStart(0)
+	  mpIndices(NULL)
 {
-
+	mpXformedPos[0] = mpXformedPos[1] = NULL;
 }
 
 TransformedMeshScalar::~TransformedMeshScalar()
@@ -46,25 +44,27 @@ void TransformedMeshScalar::Initialize(CPUTMeshDX11* pMesh)
 //-------------------------------------------------------------------
 // Trasforms the occluder vertices to screen space once every frame
 //-------------------------------------------------------------------
-void TransformedMeshScalar::TransformVertices(const float4x4& cumulativeMatrix, 
+void TransformedMeshScalar::TransformVertices(const float4x4 &cumulativeMatrix, 
 										      UINT start, 
-										      UINT end)
+										      UINT end,
+											  UINT idx)
 {
 	for(UINT i = start; i <= end; i++)
 	{
-		mpXformedPos[i] = TransformCoords(mpVertices[i].pos, cumulativeMatrix);
-		float oneOverW = 1.0f/max(mpXformedPos[i].w, 0.0000001f);
-		mpXformedPos[i] = mpXformedPos[i] * oneOverW;
-		mpXformedPos[i].w = oneOverW;
+		float4 xform = TransformCoords(mpVertices[i].pos, cumulativeMatrix);
+		float4 projected = xform / xform.w; 
+
+		//set to all 0s if clipped by near clip plane
+		mpXformedPos[idx][i] = xform.z <= xform.w ? projected : float4(0.0, 0.0, 0.0, 0.0);
 	}
 }
 
-void TransformedMeshScalar::Gather(float4 pOut[3], UINT triId)
+void TransformedMeshScalar::Gather(float4 pOut[3], UINT triId, UINT idx)
 {
 	for(UINT i = 0; i < 3; i++)
 	{
 		UINT index = mpIndices[(triId * 3) + i];
-		pOut[i] = mpXformedPos[index];	
+		pOut[i] = mpXformedPos[idx][index];	
 	}
 }
 
@@ -79,67 +79,62 @@ void TransformedMeshScalar::BinTransformedTrianglesST(UINT taskId,
 													  UINT* pBin,
 												      USHORT* pBinModel,
 													  USHORT* pBinMesh,
-													  USHORT* pNumTrisInBin)
+													  USHORT* pNumTrisInBin,
+													  UINT idx)
 {
 	// working on one triangle at a time
 	for(UINT index = start; index <= end; index++)
 	{
 		float4 xformedPos[3];
-		Gather(xformedPos, index);
-			
-		// TODO: Maybe convert to Fixed pt and store it once so that dont have to convert to fixedPt again during rasterization
-		int4 xFormedFxPtPos[3] = {
-			int4(xformedPos[0]),
-			int4(xformedPos[1]),
-			int4(xformedPos[2]),
-		};
+		Gather(xformedPos, index, idx);
 
-		// Compute triangle are
-		int A0 = xFormedFxPtPos[1].y - xFormedFxPtPos[2].y;
-		int B0 = xFormedFxPtPos[2].x - xFormedFxPtPos[1].x;
-		int C0 = (xFormedFxPtPos[1].x * xFormedFxPtPos[2].y) - (xFormedFxPtPos[2].x * xFormedFxPtPos[1].y);
-		int triArea = A0 * xFormedFxPtPos[0].x + B0 * xFormedFxPtPos[0].y + C0;
+		int fxPtX[3], fxPtY[3];
+		for(int i = 0; i < 3; i++)
+		{
+			fxPtX[i] = (int)(xformedPos[i].x + 0.5);
+			fxPtY[i] = (int)(xformedPos[i].y + 0.5);
+		}
 		
+		// Compute triangle are
+		int triArea = (fxPtX[1] - fxPtX[0]) * (fxPtY[2] - fxPtY[0]) - (fxPtX[0] - fxPtX[2]) * (fxPtY[0] - fxPtY[1]);
+				
 		// Find bounding box for screen space triangle in terms of pixels
-		int startX = max(min(min(xFormedFxPtPos[0].x, xFormedFxPtPos[1].x), xFormedFxPtPos[2].x), 0); 
-        int endX   = min(max(max(xFormedFxPtPos[0].x, xFormedFxPtPos[1].x), xFormedFxPtPos[2].x) + 1, SCREENW);
+		int startX = max(min(min(fxPtX[0], fxPtX[1]), fxPtX[2]), 0); 
+        int endX   = min(max(max(fxPtX[0], fxPtX[1]), fxPtX[2]), SCREENW - 1);
 
-        int startY = max(min(min(xFormedFxPtPos[0].y, xFormedFxPtPos[1].y), xFormedFxPtPos[2].y), 0 );
-        int endY   = min(max(max(xFormedFxPtPos[0].y, xFormedFxPtPos[1].y), xFormedFxPtPos[2].y) + 1, SCREENH);
+        int startY = max(min(min(fxPtY[0], fxPtY[1]), fxPtY[2]), 0 );
+        int endY   = min(max(max(fxPtY[0], fxPtY[1]), fxPtY[2]), SCREENH - 1);
 
 		// Skip triangle if area is zero 
 		if(triArea <= 0) continue;
+		// Dont bin screen-clipped triangles
+		if(endX < startX || endY < startY) continue;
 			
-		float oneOverW[3];
-		for(int j = 0; j < 3; j++)
-		{
-			oneOverW[j] = xformedPos[j].w;
-		}
-
 		// Reject the triangle if any of its verts is behind the nearclip plane
-		if(oneOverW[0] > 1.0f || oneOverW[1] > 1.0f || oneOverW[2] > 1.0f) continue;
-
-		// Convert bounding box in terms of pixels to bounding box in terms of tiles
-		int startXx = max(startX/TILE_WIDTH_IN_PIXELS, 0);
-		int endXx   = min(endX/TILE_WIDTH_IN_PIXELS, SCREENW_IN_TILES-1);
-
-		int startYy = max(startY/TILE_HEIGHT_IN_PIXELS, 0);
-		int endYy   = min(endY/TILE_HEIGHT_IN_PIXELS, SCREENH_IN_TILES-1);
-
-		// Add triangle to the tiles or bins that the bounding box covers
-		int row, col;
-		for(row = startYy; row <= endYy; row++)
+		if(xformedPos[0].w > 0.0f && xformedPos[1].w > 0.0f && xformedPos[2].w > 0.0f) 
 		{
-			int offset1 = YOFFSET1_ST * row;
-			int offset2 = YOFFSET2_ST * row;
-			for(col = startXx; col <= endXx; col++)
+			// Convert bounding box in terms of pixels to bounding box in terms of tiles
+			int startXx = max(startX/TILE_WIDTH_IN_PIXELS, 0);
+			int endXx   = min(endX/TILE_WIDTH_IN_PIXELS, SCREENW_IN_TILES-1);
+		
+			int startYy = max(startY/TILE_HEIGHT_IN_PIXELS, 0);
+			int endYy   = min(endY/TILE_HEIGHT_IN_PIXELS, SCREENH_IN_TILES-1);
+
+			// Add triangle to the tiles or bins that the bounding box covers
+			int row, col;
+			for(row = startYy; row <= endYy; row++)
 			{
-				int idx1 = offset1 + (XOFFSET1_ST * col) + taskId;
-				int idx2 = offset2 + (XOFFSET2_ST * col) + (taskId * MAX_TRIS_IN_BIN_ST) + pNumTrisInBin[idx1];
-				pBin[idx2] = index;
-				pBinModel[idx2] = modelId;
-				pBinMesh[idx2] = meshId;
-				pNumTrisInBin[idx1] += 1;
+				int offset1 = YOFFSET1_ST * row;
+				int offset2 = YOFFSET2_ST * row;
+				for(col = startXx; col <= endXx; col++)
+				{
+					int idx1 = offset1 + (XOFFSET1_ST * col) + taskId;
+					int idx2 = offset2 + (XOFFSET2_ST * col) + (taskId * MAX_TRIS_IN_BIN_ST) + pNumTrisInBin[idx1];
+					pBin[idx2] = index;
+					pBinModel[idx2] = modelId;
+					pBinMesh[idx2] = meshId;
+					pNumTrisInBin[idx1] += 1;
+				}
 			}
 		}
 	}
@@ -156,81 +151,73 @@ void TransformedMeshScalar::BinTransformedTrianglesMT(UINT taskId,
 													  UINT* pBin,
 												      USHORT* pBinModel,
 													  USHORT* pBinMesh,
-													  USHORT* pNumTrisInBin)
+													  USHORT* pNumTrisInBin,
+													  UINT idx)
 {
 	// working on 4 triangles at a time
 	for(UINT index = start; index <= end; index++)
 	{
 		float4 xformedPos[3];
-		Gather(xformedPos, index);
-			
-		// TODO: Maybe convert to Fixed pt and store it once so that dont have to convert to fixedPt again during rasterization
-		int4 xFormedFxPtPos[3] = {
-			int4(xformedPos[0]),
-			int4(xformedPos[1]),
-			int4(xformedPos[2]),
-		};
-
-		// Compute triangle are
-		int A0 = xFormedFxPtPos[1].y - xFormedFxPtPos[2].y;
-		int B0 = xFormedFxPtPos[2].x - xFormedFxPtPos[1].x;
-		int C0 = (xFormedFxPtPos[1].x * xFormedFxPtPos[2].y) - (xFormedFxPtPos[2].x * xFormedFxPtPos[1].y);
-		int triArea = A0 * xFormedFxPtPos[0].x + B0 * xFormedFxPtPos[0].y + C0;
+		Gather(xformedPos, index, idx);
 		
-		// Find bounding box for screen space triangle in terms of pixels
-		int startX = max(min(min(xFormedFxPtPos[0].x, xFormedFxPtPos[1].x), xFormedFxPtPos[2].x), 0);
-        int endX   = min(max(max(xFormedFxPtPos[0].x, xFormedFxPtPos[1].x), xFormedFxPtPos[2].x) + 1, SCREENW);
-
-        int startY = max(min(min(xFormedFxPtPos[0].y, xFormedFxPtPos[1].y), xFormedFxPtPos[2].y), 0 );
-        int endY   = min(max(max(xFormedFxPtPos[0].y, xFormedFxPtPos[1].y), xFormedFxPtPos[2].y) + 1, SCREENH);
-
-		// Skip triangle if area is zero 
-		if(triArea <= 0) continue;
-			
-		float oneOverW[3];
-		for(int j = 0; j < 3; j++)
+		int fxPtX[3], fxPtY[3];
+		for(int i = 0; i < 3; i++)
 		{
-			oneOverW[j] = xformedPos[j].w;
+			fxPtX[i] = (int)(xformedPos[i].x + 0.5);
+			fxPtY[i] = (int)(xformedPos[i].y + 0.5);
 		}
 
+		// Compute triangle are
+		int triArea = (fxPtX[1] - fxPtX[0]) * (fxPtY[2] - fxPtY[0]) - (fxPtX[0] - fxPtX[2]) * (fxPtY[0] - fxPtY[1]);
+		
+		// Skip triangle if area is zero 
+		if(triArea <= 0) continue;
+		
+		// Find bounding box for screen space triangle in terms of pixels
+		int startX = max(min(min(fxPtX[0], fxPtX[1]), fxPtX[2]), 0);
+        int endX   = min(max(max(fxPtX[0], fxPtX[1]), fxPtX[2]), SCREENW-1 );
+
+        int startY = max(min(min(fxPtY[0], fxPtY[1]), fxPtY[2]), 0);
+        int endY   = min(max(max(fxPtY[0], fxPtY[1]), fxPtY[2]), SCREENH-1);
+		// Dont bin screen-clipped triangles
+		if(endX < startX || endY < startY) continue;
+				
 		// Reject the triangle if any of its verts is behind the nearclip plane
-		if(oneOverW[0] > 1.0f || oneOverW[1] > 1.0f || oneOverW[2] > 1.0f) continue;
-
-		// Convert bounding box in terms of pixels to bounding box in terms of tiles
-		int startXx = max(startX/TILE_WIDTH_IN_PIXELS, 0);
-		int endXx   = min(endX/TILE_WIDTH_IN_PIXELS, SCREENW_IN_TILES-1);
-
-		int startYy = max(startY/TILE_HEIGHT_IN_PIXELS, 0);
-		int endYy   = min(endY/TILE_HEIGHT_IN_PIXELS, SCREENH_IN_TILES-1);
-
-		// Add triangle to the tiles or bins that the bounding box covers
-		int row, col;
-		for(row = startYy; row <= endYy; row++)
+		if(xformedPos[0].w > 0.0f && xformedPos[1].w > 0.0f && xformedPos[2].w > 0.0f) 
 		{
-			int offset1 = YOFFSET1_MT * row;
-			int offset2 = YOFFSET2_MT * row;
-			for(col = startXx; col <= endXx; col++)
+			// Convert bounding box in terms of pixels to bounding box in terms of tiles
+			int startXx = max(startX/TILE_WIDTH_IN_PIXELS, 0);
+			int endXx   = min(endX/TILE_WIDTH_IN_PIXELS, SCREENW_IN_TILES-1);
+
+			int startYy = max(startY/TILE_HEIGHT_IN_PIXELS, 0);
+			int endYy   = min(endY/TILE_HEIGHT_IN_PIXELS, SCREENH_IN_TILES-1);
+
+			// Add triangle to the tiles or bins that the bounding box covers
+			int row, col;
+			for(row = startYy; row <= endYy; row++)
 			{
-				int idx1 = offset1 + (XOFFSET1_MT * col) + taskId;
-				int idx2 = offset2 + (XOFFSET2_MT * col) + (taskId * MAX_TRIS_IN_BIN_MT) + pNumTrisInBin[idx1];
-				pBin[idx2] = index;
-				pBinModel[idx2] = modelId;
-				pBinMesh[idx2] = meshId;
-				pNumTrisInBin[idx1] += 1;
+				int offset1 = YOFFSET1_MT * row;
+				int offset2 = YOFFSET2_MT * row;
+				for(col = startXx; col <= endXx; col++)
+				{
+					int idx1 = offset1 + (XOFFSET1_MT * col) + (TOFFSET1_MT * taskId);
+					int idx2 = offset2 + (XOFFSET2_MT * col) + (taskId * MAX_TRIS_IN_BIN_MT) + pNumTrisInBin[idx1];
+					pBin[idx2] = index;
+					pBinModel[idx2] = modelId;
+					pBinMesh[idx2] = meshId;
+					pNumTrisInBin[idx1] += 1;
+				}
 			}
 		}
 	}
 }
 
-void TransformedMeshScalar::GetOneTriangleData(float* xformedPos, UINT triId, UINT lane)
+void TransformedMeshScalar::GetOneTriangleData(float* xformedPos, UINT triId, UINT idx)
 {
 	float4* pOut = (float4*) xformedPos;
 	for(int i = 0; i < 3; i++)
 	{
 		UINT index = mpIndices[(triId * 3) + i];
-		(pOut + i)->x = mpXformedPos[index].x;
-		(pOut + i)->y = mpXformedPos[index].y;
-		(pOut + i)->z = mpXformedPos[index].z;
-		(pOut + i)->w = mpXformedPos[index].w;
+		*(pOut + i) = mpXformedPos[idx][index];
 	}
 }

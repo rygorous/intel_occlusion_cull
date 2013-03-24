@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -29,9 +29,9 @@ bool CPUTShaderDX11::ShaderRequiresPerModelPayload( CPUTConfigBlock &properties 
     // If any of them begin with '@', then we need a unique material per model (i.e., we need to clone the material).
     int ii=0;
     D3D11_SHADER_INPUT_BIND_DESC desc;
-	HRESULT hr = pReflector->GetResourceBindingDesc( ii++, &desc );
-	while( SUCCEEDED(hr) )
-	{
+    HRESULT hr = pReflector->GetResourceBindingDesc( ii++, &desc );
+    while( SUCCEEDED(hr) )
+    {
         cString tagName = s2ws(desc.Name);
         CPUTConfigEntry *pValue = properties.GetValueByName(tagName);
         if( !pValue->IsValid() )

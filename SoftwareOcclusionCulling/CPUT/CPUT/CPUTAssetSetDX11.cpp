@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -42,7 +42,6 @@ CPUTResult CPUTAssetSetDX11::LoadAssetSet(cString name)
     // if not found, load the set file
     CPUTConfigFile ConfigFile;
     result = ConfigFile.LoadFile(name);
-#if 1
     if( !CPUTSUCCESS(result) )
     {
         return result;
@@ -50,7 +49,6 @@ CPUTResult CPUTAssetSetDX11::LoadAssetSet(cString name)
     // ASSERT( CPUTSUCCESS(result), _L("Failed loading set file '") + name + _L("'.") );
 
     mAssetCount = ConfigFile.BlockCount() + 1; // Add one for the implied root node
-    // mAssetCount = min(2, mAssetCount); // Add one for the implied root node
     mppAssetList = new CPUTRenderNode*[mAssetCount];
     mppAssetList[0] = mpRootNode;
     mpRootNode->AddRef();
@@ -59,7 +57,7 @@ CPUTResult CPUTAssetSetDX11::LoadAssetSet(cString name)
     for(UINT ii=0; ii<mAssetCount-1; ii++) // Note: -1 because we added one for the root node (we don't load it)
     {
         CPUTConfigBlock *pBlock = ConfigFile.GetBlock(ii);
-        int assetIndex = pBlock->GetNameValue();
+		ASSERT(pBlock != NULL, _L("Cannot find block"));
         cString nodeType = pBlock->GetValueByName(_L("type"))->ValueAsString();
         CPUTRenderNode *pParentNode = NULL;
 
@@ -68,7 +66,7 @@ CPUTResult CPUTAssetSetDX11::LoadAssetSet(cString name)
         cString name = pBlock->GetValueByName(_L("name"))->ValueAsString();
 
         int parentIndex;
-        CPUTRenderNode *pNode;
+        CPUTRenderNode *pNode = NULL;
         if(0==nodeType.compare(_L("null")))
         {
             pNode  = pNode = new CPUTNullNode();
@@ -147,9 +145,7 @@ CPUTResult CPUTAssetSetDX11::LoadAssetSet(cString name)
         // Net effect is 0 (+1 to add to list, and -1 because we're done with it)
         // pNode->AddRef();
     }
-#endif
-    HEAPCHECK
-	return result;
+    return result;
 }
 
 //-----------------------------------------------------------------------------

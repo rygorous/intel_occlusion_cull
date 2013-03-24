@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -38,11 +38,7 @@
 
 #include "TaskMgrTBB.h"
 
-enum SOC_TYPE
-{
-	SCALAR_TYPE,
-	SSE_TYPE,
-};
+
 
 //-----------------------------------------------------------------------------
 class MySample : public CPUT_DX11
@@ -58,6 +54,7 @@ private:
 
     CPUTText              *mpFPSCounter;
 	CPUTDropdown		  *mpTypeDropDown;
+	CPUTCamera			   mCameraCopy[2];
 
 	CPUTText			  *mpOccludersText;
 	CPUTText			  *mpNumOccludersText;
@@ -77,12 +74,15 @@ private:
 	CPUTText			  *mpDepthTestTimeText;
 	CPUTSlider			  *mpOccludeeSizeSlider;
 
+	CPUTText			  *mpTotalCullTimeText;
+
 	CPUTCheckbox		  *mpCullingCheckBox;
 	CPUTCheckbox		  *mpFCullingCheckBox;
 	CPUTCheckbox		  *mpDBCheckBox;
 	CPUTCheckbox		  *mpBBCheckBox;
 	CPUTCheckbox		  *mpTasksCheckBox;
 	CPUTCheckbox		  *mpVsyncCheckBox;
+	CPUTCheckbox		  *mpPipelineCheckBox;
 
 	CPUTText		      *mpDrawCallsText;
 	CPUTSlider			  *mpDepthTestTaskSlider;
@@ -91,9 +91,22 @@ private:
 	CPUTAssetSet		  *mpAssetSetAABB[OCCLUDEE_SETS];
 	CPUTAssetSet		  *mpAssetSetSky;
 
-	ID3D11Texture2D         *mpCPURenderTarget;
-	ID3D11Texture2D         *mpBackBuffer;
-	ID3D11RenderTargetView  *mpRTView;
+	CPUTMaterialDX11		 *mpShowDepthBufMtrlScalar;
+	CPUTMaterialDX11		 *mpShowDepthBufMtrlSSE;
+	CPUTMaterialDX11		 *mpShowDepthBufMtrl;
+	
+	char					 *mpCPUDepthBuf[2];
+	char					 *mpGPUDepthBuf;
+	
+	ID3D11Texture2D          *mpCPURenderTargetScalar[2];
+	ID3D11Texture2D          *mpCPURenderTargetSSE[2];
+	ID3D11Texture2D          *mpCPURenderTarget[2];
+
+	ID3D11ShaderResourceView *mpCPUSRVScalar[2];
+	ID3D11ShaderResourceView *mpCPUSRVSSE[2];
+	ID3D11ShaderResourceView *mpCPUSRV[2];
+
+	UINT					 rowPitch;
 
 	SOC_TYPE mSOCType;
 	DepthBufferRasterizer	 		*mpDBR;
@@ -124,14 +137,20 @@ private:
 	double				mDepthTestTime;
 	float				mOccludeeSizeThreshold;
 
+	double				mTotalCullTime;
+
 	bool				mEnableCulling;
 	bool				mEnableFCulling;
 	bool				mViewDepthBuffer;
 	bool				mViewBoundingBox;
 	bool				mEnableTasks;
+	bool				mPipeline;
 
 	UINT				mNumDrawCalls;
 	UINT				mNumDepthTestTasks;
+	UINT				mCurrId;
+	UINT				mPrevId;
+	bool				mFirstFrame;
 
 public:
     MySample() :
@@ -157,39 +176,57 @@ public:
 		mpVisibleTrisText(NULL),
 		mpDepthTestTimeText(NULL),
 		mpOccludeeSizeSlider(NULL),
+		mpTotalCullTimeText(NULL),
 		mpCullingCheckBox(NULL),
 		mpFCullingCheckBox(NULL),
 		mpDBCheckBox(NULL),
 		mpBBCheckBox(NULL),
 		mpTasksCheckBox(NULL),
 		mpVsyncCheckBox(NULL),
+		mpPipelineCheckBox(NULL),
 		mpDrawCallsText(NULL),
 		mpDepthTestTaskSlider(NULL),
-		mpCPURenderTarget(NULL),
-		mpBackBuffer(NULL),
-		mpRTView(NULL),
-		mSOCType(SSE_TYPE),
+		mpGPUDepthBuf(NULL),
+		mSOCType(gSOCType),
 		mNumOccluders(0),
 		mNumOccludersR2DB(0),
 		mNumOccluderTris(0),
 		mNumOccluderRasterizedTris(0),
 		mRasterizeTime(0.0),
-		mOccluderSizeThreshold(1.5f),
+		mOccluderSizeThreshold(gOccluderSizeThreshold),
 		mNumCulled(0),
 		mNumVisible(0),
 		mNumOccludeeTris(0),
 		mNumOccludeeCulledTris(0),
 		mNumOccludeeVisibleTris(0),
 		mDepthTestTime(0.0),
-		mOccludeeSizeThreshold(0.01f),
+		mOccludeeSizeThreshold(gOccludeeSizeThreshold),
+		mTotalCullTime(0.0),
 		mEnableCulling(true),
 		mEnableFCulling(true),
 		mViewDepthBuffer(false),
 		mViewBoundingBox(false),
 		mEnableTasks(true),
+		mPipeline(false),
 		mNumDrawCalls(0),
-		mNumDepthTestTasks(20)
+		mNumDepthTestTasks(gDepthTestTasks),
+		mCurrId(0),
+		mPrevId(1),
+		mFirstFrame(true)
     {
+		mpCPURenderTargetScalar[0] = NULL;
+		mpCPURenderTargetScalar[1] = NULL;
+
+		mpCPURenderTargetSSE[0] = NULL;
+		mpCPURenderTargetSSE[1] = NULL;
+
+		mpCPURenderTarget[0] = NULL;
+		mpCPURenderTarget[1] = NULL;
+
+		mpCPUSRVScalar[0] = mpCPUSRVScalar[1] = NULL;
+		mpCPUSRVSSE[0]	  = mpCPUSRVSSE[1]    = NULL;
+		mpCPUSRV[0]		  = mpCPUSRV[1]       = NULL;
+
 		for(UINT i = 0; i < OCCLUDER_SETS; i++)
 		{
 			mpAssetSetDBR[i] = NULL;
@@ -201,6 +238,8 @@ public:
 		}
 
 		mpAssetSetSky = NULL;
+		mpCPUDepthBuf[0] = mpCPUDepthBuf[1] = NULL;
+		mpShowDepthBufMtrlScalar = mpShowDepthBufMtrlSSE = mpShowDepthBufMtrl = NULL;
 
 		if((mSOCType == SCALAR_TYPE) && !mEnableTasks)
 		{
@@ -241,13 +280,19 @@ public:
         SAFE_RELEASE(mpCamera);
         SAFE_RELEASE(mpShadowCamera);
 
-		SAFE_RELEASE(mpCPURenderTarget);
-		if(mViewDepthBuffer)
-		{
-			SAFE_RELEASE(mpBackBuffer);
-			SAFE_RELEASE(mpRTView);
-		}
+		SAFE_DELETE_ARRAY(mpCPUDepthBuf[0]);
+		SAFE_DELETE_ARRAY(mpCPUDepthBuf[1]);
+		SAFE_DELETE(mpGPUDepthBuf);
+		SAFE_RELEASE(mpCPURenderTargetScalar[0]);
+		SAFE_RELEASE(mpCPURenderTargetScalar[1]);
+		SAFE_RELEASE(mpCPURenderTargetSSE[0]);
+		SAFE_RELEASE(mpCPURenderTargetSSE[1]);
 
+		SAFE_RELEASE(mpCPUSRVScalar[0]);
+		SAFE_RELEASE(mpCPUSRVScalar[1]);
+		SAFE_RELEASE(mpCPUSRVSSE[0]);
+		SAFE_RELEASE(mpCPUSRVSSE[1]);
+		
 		SAFE_DELETE(mpDBR);
 		SAFE_DELETE(mpAABB);
 
@@ -256,12 +301,16 @@ public:
 			SAFE_RELEASE(mpAssetSetDBR[i]);
 		}
 		SAFE_RELEASE(mpAssetSetAABB[0]);
-		SAFE_RELEASE(mpAssetSetSky);
+		SAFE_RELEASE(mpAssetSetAABB[1]);
+		SAFE_RELEASE(mpAssetSetSky); 
 
         SAFE_DELETE( mpCameraController );
         SAFE_DELETE( mpDebugSprite);
         SAFE_RELEASE(mpShadowCameraSet);
         SAFE_DELETE( mpShadowRenderTarget );
+
+		SAFE_RELEASE( mpShowDepthBufMtrlScalar);
+		SAFE_RELEASE( mpShowDepthBufMtrlSSE);
 
         CPUTModel::ReleaseStaticResources();
     }
@@ -276,8 +325,10 @@ public:
     virtual void Render(double deltaSeconds);
     virtual void Update(double deltaSeconds);
     virtual void ResizeWindow(UINT width, UINT height);
+	virtual void TaskCleanUp();
+	virtual void UpdateGPUDepthBuf(UINT idx);
 
-	// define some controls
+	// define some controls1
 	static const CPUTControlID ID_MAIN_PANEL = 10;
 	static const CPUTControlID ID_SECONDARY_PANEL = 20;
 	static const CPUTControlID ID_FULLSCREEN_BUTTON = 100;
@@ -305,13 +356,16 @@ public:
 	static const CPUTControlID ID_DEPTHTEST_TIME = 2400;
 	static const CPUTControlID ID_OCCLUDEE_SIZE = 2500;
 
-	static const CPUTControlID ID_ENABLE_CULLING = 2600;
-	static const CPUTControlID ID_ENABLE_FCULLING = 2700;
-	static const CPUTControlID ID_DEPTH_BUFFER_VISIBLE = 2800;
-	static const CPUTControlID ID_BOUNDING_BOX_VISIBLE = 2900;
-	static const CPUTControlID ID_ENABLE_TASKS = 3000;
-	static const CPUTControlID ID_NUM_DRAW_CALLS = 3100;
-	static const CPUTControlID ID_DEPTH_TEST_TASKS = 3200;
-	static const CPUTControlID ID_VSYNC_ON_OFF = 3300;
+	static const CPUTControlID ID_TOTAL_CULL_TIME = 2600;
+
+	static const CPUTControlID ID_ENABLE_CULLING = 2700;
+	static const CPUTControlID ID_ENABLE_FCULLING = 2800;
+	static const CPUTControlID ID_DEPTH_BUFFER_VISIBLE = 2900;
+	static const CPUTControlID ID_BOUNDING_BOX_VISIBLE = 3000;
+	static const CPUTControlID ID_ENABLE_TASKS = 3100;
+	static const CPUTControlID ID_NUM_DRAW_CALLS = 3200;
+	static const CPUTControlID ID_DEPTH_TEST_TASKS = 3300;
+	static const CPUTControlID ID_VSYNC_ON_OFF = 3400;
+	static const CPUTControlID ID_PIPELINE = 3500;
 };
 #endif // __CPUT_SAMPLESTARTDX11_H__

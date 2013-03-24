@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -24,13 +24,14 @@ class DepthBufferRasterizerScalarST : public DepthBufferRasterizerScalar
 		DepthBufferRasterizerScalarST();
 		~DepthBufferRasterizerScalarST();
 
-		void IsVisible(CPUTCamera* pCamera);
-		void TransformModelsAndRasterizeToDepthBuffer();
+		void TransformModelsAndRasterizeToDepthBuffer(CPUTCamera *pCamera, UINT idx);
+		void ComputeR2DBTime(UINT idx);
 
 	private:
-		void TransformMeshes();
-		void BinTransformedMeshes();
-		void RasterizeBinnedTrianglesToDepthBuffer(UINT tileId);
+		void ActiveModels(UINT idx);
+		void TransformMeshes(UINT idx);
+		void BinTransformedMeshes(UINT idx);
+		void RasterizeBinnedTrianglesToDepthBuffer(UINT tileId, UINT idx);
 };
 
 #endif  //DEPTHBUFFERRASTERIZERSCALARST_H

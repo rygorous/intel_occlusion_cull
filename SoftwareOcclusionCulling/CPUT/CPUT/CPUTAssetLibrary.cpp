@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -144,22 +144,9 @@ void CPUTAssetLibrary::ReleaseList(CPUTAssetListEntry *pLibraryRoot)
     for( CPUTAssetListEntry *pNodeEntry = pLibraryRoot; NULL != pNodeEntry; pNodeEntry = pNext )
     {
         pNext = pNodeEntry->pNext;
-        CPUTRenderNode *pDebugNode = (CPUTRenderNode*)pNodeEntry->pData;
         CPUTRefCount *pRefCountedNode = (CPUTRefCount*)pNodeEntry->pData;
         pRefCountedNode->Release();
         HEAPCHECK;
-        delete pNodeEntry;
-    }
-}
-
-//-----------------------------------------------------------------------------
-void CPUTAssetLibrary::DeleteListEntries(CPUTAssetListEntry *pLibraryRoot)
-{
-    CPUTAssetListEntry *pNodeEntry = pLibraryRoot;
-
-    HEAPCHECK;
-    while( NULL!=pNodeEntry )
-    {
         delete pNodeEntry;
     }
 }
@@ -173,13 +160,21 @@ void *CPUTAssetLibrary::FindAsset(const cString &name, CPUTAssetListEntry *pList
 {
     cString absolutePathAndFilename;
     CPUTOSServices *pServices = CPUTOSServices::GetOSServices();
-    pServices->ResolveAbsolutePathAndFilename( nameIsFullPathAndFilename ? name : (mAssetSetDirectoryName + name), &absolutePathAndFilename);
-    absolutePathAndFilename = nameIsFullPathAndFilename ? name : absolutePathAndFilename;
+    if( !nameIsFullPathAndFilename )
+    {
+        pServices->ResolveAbsolutePathAndFilename( mAssetSetDirectoryName + name, &absolutePathAndFilename);
+    }
+	else
+	{
+        absolutePathAndFilename = name;
+    }
+    UINT hash = CPUTComputeHash( absolutePathAndFilename );
 
     while(NULL!=pList)
     {
         if(    pModel    == pList->pModel
             && meshIndex == pList->meshIndex
+            && hash      == pList->hash
             && (0 == _wcsicmp( absolutePathAndFilename.data(), pList->name.data() ))
         )
         {
@@ -256,7 +251,6 @@ void CPUTAssetLibrary::AddAssetInstance(
 CPUTRenderStateBlock *CPUTAssetLibrary::GetRenderStateBlock(const cString &name, bool nameIsFullPathAndFilename )
 {
     // Resolve name to absolute path before searching
-    CPUTResult result = CPUT_SUCCESS;
     cString finalName;
     if( name.at(0) == '$' )
     {
@@ -308,7 +302,7 @@ CPUTMaterial *CPUTAssetLibrary::GetMaterial(const cString &name, bool nameIsFull
     cString absolutePathAndFilename;
     pServices->ResolveAbsolutePathAndFilename( nameIsFullPathAndFilename? name : (mMaterialDirectoryName + name + _L(".mtl")), &absolutePathAndFilename);
 
-    CPUTMaterial *pMaterial;
+    CPUTMaterial *pMaterial=NULL;
     if( pModel )
     {
         pMaterial = pModel->GetMaterial( absolutePathAndFilename, meshIndex );
@@ -318,36 +312,43 @@ CPUTMaterial *CPUTAssetLibrary::GetMaterial(const cString &name, bool nameIsFull
             return pMaterial;
         }
     }
-    else
+
+    if( !pMaterial )
     {
         // Loading a non-instanced material (or, the master)
         pMaterial = FindMaterial(absolutePathAndFilename, true);
     }
 
     // If the material has per-model properties, then we need a material clone
-    if( !pMaterial )
+    if( pMaterial )
+    {
+        pMaterial->AddRef();
+    }
+    else
     {
         pMaterial = CPUTMaterial::CreateMaterial( absolutePathAndFilename, pModel, meshIndex );
         ASSERT( pMaterial, _L("Failed creating material.") );
     }
-    if( !pModel )
-    {
-        // Not looking for an instance, so return what we found
-        return pMaterial;
-    }
-    CPUTMaterial *pClone = pMaterial->CloneMaterial( absolutePathAndFilename, pModel, meshIndex);
-    pMaterial->Release(); // We don't want to hold a reference to the master.
-    return pClone;
-}
 
+    if( pModel )
+    {
+        bool needClone = pMaterial->MaterialRequiresPerModelPayload();
+        if( needClone )
+        {
+            CPUTMaterial *pClone = pMaterial->CloneMaterial( absolutePathAndFilename, pModel, meshIndex);
+            pMaterial->Release(); // We don't want to hold a reference to the master.
+            return pClone;
+        }
+    }
+    // Not looking for an instance, so return what we found
+    return pMaterial;
+}
 
 // Get CPUTModel from asset library
 // If the model exists, then the existing model is Addref'ed and returned
 //-----------------------------------------------------------------------------
 CPUTModel *CPUTAssetLibrary::GetModel(const cString &name, bool nameIsFullPathAndFilename)
 {
-    CPUTResult result = CPUT_SUCCESS;
-
     // Resolve name to absolute path before searching
     cString absolutePathAndFilename;
     CPUTOSServices *pServices = CPUTOSServices::GetOSServices();
@@ -452,14 +453,6 @@ CPUTBuffer *CPUTAssetLibrary::GetConstantBuffer(const cString &name, const CPUTM
             else
             {
                 return NULL;
-            }
-        }
-        else
-        {
-            // HACK: Need a better way.
-            if( 0 == _wcsicmp(_L("#cbPerModelValues"), name.data()) )
-            {
-                return pModel->GetModelConstantBuffer();
             }
         }
         pBuffer = pModel->GetBuffer( name, meshIndex );

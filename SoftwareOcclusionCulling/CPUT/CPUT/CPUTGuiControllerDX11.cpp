@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -55,7 +55,8 @@ CPUTGuiControllerDX11::CPUTGuiControllerDX11():CPUTGuiController(),
     mpFPSMirrorBuffer(NULL),
     mFPSBufferIndex(0),
     mpFPSDirectXBuffer(NULL),
-    mpFPSTimer(NULL)
+    mpFPSTimer(NULL),
+	mFPSInst(0)
 {
     mpMirrorBuffer = new CPUTGUIVertex[CPUT_GUI_BUFFER_SIZE];
     mpTextMirrorBuffer = new  CPUTGUIVertex[CPUT_GUI_BUFFER_STRING_SIZE];
@@ -459,7 +460,18 @@ void CPUTGuiControllerDX11::Draw(ID3D11DeviceContext *pImmediateContext)
     double fps = 1.0 / elapsed;
     mLastFPS = (float) fps;
 
-    // if we're drawing the FPS counter - update that
+	mFPSAvg[mFPSInst] = (float) fps;
+	mFPSInst++;
+	if(mFPSInst == AVG_FRAMES)
+		mFPSInst = 0;
+
+	float total = 0.0f;
+	for(int i = 0; i < AVG_FRAMES; i++)
+	{
+		total += mFPSAvg[mFPSInst];
+	}
+
+	// if we're drawing the FPS counter - update that
     // We do this independently of uber-buffer updates since we'll have FPS updates every frame,
     // but likely not have control updates every frame
     if(mbDrawFPS)
@@ -470,12 +482,12 @@ void CPUTGuiControllerDX11::Draw(ID3D11DeviceContext *pImmediateContext)
         cString Data;
         {
             wchar_t wcstring[CPUT_MAX_STRING_LENGTH];
-            swprintf_s(&wcstring[0], CPUT_MAX_STRING_LENGTH, _L("%.2f"), fps);
+            swprintf_s(&wcstring[0], CPUT_MAX_STRING_LENGTH, _L("FPS:%.2f  (AVG:%.2f)"), fps, total/(float)AVG_FRAMES);
             Data=wcstring;
         }
-        // build the FPS string
-        cString FPS = _L("FPS: ")+Data;
-        mpFPSCounter->SetText(FPS);        
+		// build the FPS string
+        cString FPS = Data;
+        mpFPSCounter->SetText(FPS); 
 
         // 'draw' the string into the buffer
         mFPSBufferIndex = 0;

@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -355,7 +355,7 @@ D3D11_MAPPED_SUBRESOURCE CPUTMeshDX11::Map(
             desc.BindFlags = 0;
             break;
         };
-        HRESULT hr = pD3dDevice->CreateBuffer( &desc, NULL, pStagingBuffer );
+        hr = pD3dDevice->CreateBuffer( &desc, NULL, pStagingBuffer );
         ASSERT( SUCCEEDED(hr), _L("Failed to create staging buffer") );
         CPUTSetDebugName( *pStagingBuffer, _L("Mesh Staging buffer") );
     }

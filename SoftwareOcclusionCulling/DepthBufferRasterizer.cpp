@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -16,10 +16,6 @@
 #include "DepthBufferRasterizer.h"
 
 DepthBufferRasterizer::DepthBufferRasterizer()
-	: mIsVisible(TASKSETHANDLE_INVALID),
-	  mXformMesh(TASKSETHANDLE_INVALID),
-	  mBinMesh(TASKSETHANDLE_INVALID),
-	  mRasterize(TASKSETHANDLE_INVALID)
 {
 
 }

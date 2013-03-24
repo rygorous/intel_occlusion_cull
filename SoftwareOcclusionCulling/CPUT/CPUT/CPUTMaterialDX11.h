@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -116,8 +116,8 @@ public:
         SAFE_DELETE_ARRAY(mpBufferParameterBindPoint);
         SAFE_DELETE_ARRAY(mpUAVParameterName);
         SAFE_DELETE_ARRAY(mpUAVParameterBindPoint);
-		SAFE_DELETE_ARRAY(mpConstantBufferParameterName);
-		SAFE_DELETE_ARRAY(mpConstantBufferParameterBindPoint);
+        SAFE_DELETE_ARRAY(mpConstantBufferParameterName);
+        SAFE_DELETE_ARRAY(mpConstantBufferParameterBindPoint);
     }
     void CloneShaderParameters( CPUTShaderParameters *pShaderParameter );
 };
@@ -158,6 +158,7 @@ protected:
     CPUTGeometryShaderDX11   *mpGeometryShader;
     CPUTHullShaderDX11       *mpHullShader;
     CPUTDomainShaderDX11     *mpDomainShader;
+    int                       mRequiresPerModelPayload;
 
 public:
     CPUTShaderParameters     mPixelShaderParameters;

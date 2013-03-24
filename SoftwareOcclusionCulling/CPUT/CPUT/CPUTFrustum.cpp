@@ -16,6 +16,17 @@
 #include "CPUTFrustum.h"
 #include "CPUTCamera.h"
 
+CPUTFrustum::CPUTFrustum()
+{
+	mPlanes = (float *) _aligned_malloc(4 * 2 * sizeof(__m128), sizeof(__m128));
+}
+
+//-----------------------------------------------
+CPUTFrustum::~CPUTFrustum()
+{
+	_aligned_free(mPlanes);
+}
+
 //-----------------------------------------------
 void CPUTFrustum::InitializeFrustum( CPUTCamera *pCamera )
 {
@@ -28,9 +39,8 @@ void CPUTFrustum::InitializeFrustum( CPUTCamera *pCamera )
         pCamera->GetLook(),
         pCamera->GetUp()
     );
-}
 
-float gScale2=1.0f;
+}
 
 //-----------------------------------------------
 void CPUTFrustum::InitializeFrustum
@@ -60,7 +70,7 @@ void CPUTFrustum::InitializeFrustum
     float3 farCenter  = position + look * farClipDistance;
 
     // Compute the width and height of the near and far clip planes
-    float tanHalfFov = gScale2 * tanf(0.5f*fov);
+    float tanHalfFov = tanf(0.5f*fov);
     float halfNearWidth  = nearClipDistance * tanHalfFov;
     float halfNearHeight = halfNearWidth / aspectRatio;
     
@@ -100,6 +110,22 @@ void CPUTFrustum::InitializeFrustum
     mpNormal[3] = cross3(farBottom,   bottomRight).normalize(); // bottom
     mpNormal[4] = cross3(bottomRight, farRight).normalize();    // right
     mpNormal[5] = cross3(farRight,    farBottom).normalize();   // far clip plane
+
+	for (int i=0; i < 6; i++)
+	{
+		mPlanes[0*8 + i] = mpNormal[i].x;
+		mPlanes[1*8 + i] = mpNormal[i].y;
+		mPlanes[2*8 + i] = mpNormal[i].z;
+		mPlanes[3*8 + i] = -dot3(mpNormal[i], mpPosition[(i < 3) ? 0 : 6]);
+	}
+
+	for (int i=6; i < 8; i++)
+	{
+		mPlanes[0*8 + i] = 0;
+		mPlanes[1*8 + i] = 0;
+		mPlanes[2*8 + i] = 0;
+		mPlanes[3*8 + i] = -1.0f;
+	}
 }
 
 //-----------------------------------------------
@@ -107,52 +133,35 @@ bool CPUTFrustum::IsVisible(
     const float3 &center,
     const float3 &half
 ){
-    // TODO:  There are MUCH more efficient ways to do this.
-    float3 pBoundingBoxPosition[8];
-    pBoundingBoxPosition[0] = center + float3(  half.x,  half.y,  half.z );
-    pBoundingBoxPosition[1] = center + float3(  half.x,  half.y, -half.z );
-    pBoundingBoxPosition[2] = center + float3(  half.x, -half.y,  half.z );
-    pBoundingBoxPosition[3] = center + float3(  half.x, -half.y, -half.z );
-    pBoundingBoxPosition[4] = center + float3( -half.x,  half.y,  half.z );
-    pBoundingBoxPosition[5] = center + float3( -half.x,  half.y, -half.z );
-    pBoundingBoxPosition[6] = center + float3( -half.x, -half.y,  half.z );
-    pBoundingBoxPosition[7] = center + float3( -half.x, -half.y, -half.z );
-
-    // Test each bounding box point against each of the six frustum planes.
-    // Note: we need a point on the plane to compute the distance to the plane.
-    // We only need two of our frustum's points to do this.  A corner vertex is on
-    // three of the six planes.  We need two of these corners to have a point
-    // on all six planes.
-    UINT pPointIndex[6] = {0,0,0,6,6,6};
     UINT ii;
-    for( ii=0; ii<6; ii++ )
+    float3 absHalf = abs3(half);
+
+    float3 planeToPoint = center - mpPosition[0]; // Use near-clip-top-left point for point on first three planes
+    for( ii=0; ii<3; ii++ )
     {
-        bool allEightPointsOutsidePlane = true;
-        float3 *pNormal = &mpNormal[ii];
-        float3 *pPlanePoint = &mpPosition[pPointIndex[ii]];
-        float3 planeToPoint;
-        float distanceToPlane;
-        UINT jj;
-        for( jj=0; jj<8; jj++ )
+        float3 normal      = mpNormal[ii];
+        float3 absNormal   = abs3(normal);
+        float  nDotC       = dot3( normal, planeToPoint );
+        if( nDotC > dot3( abs3(normal), absHalf ) )
         {
-            planeToPoint = pBoundingBoxPosition[jj] - *pPlanePoint;
-            distanceToPlane = dot3( *pNormal, planeToPoint );
-            if( distanceToPlane < 0.0f )
-            {
-                allEightPointsOutsidePlane = false;
-                break; // from for.  No point testing any more points against this plane.
-            }
+            return false;
         }
-        if( allEightPointsOutsidePlane )
+    }
+
+    planeToPoint = center - mpPosition[6]; // Use near-clip-top-left point for point on first three planes
+    for( ii=3; ii<6; ii++ )
+    {
+        float3 normal      = mpNormal[ii];
+        float3 absNormal   = abs3(normal);
+        float  nDotC       = dot3( normal, planeToPoint );
+        if( nDotC > dot3( abs3(normal), absHalf ) )
         {
-            mNumFrustumCulledModels++;
             return false;
         }
     }
 
     // Tested all eight points against all six planes and none of the planes
     // had all eight points outside.
-    mNumFrustumVisibleModels++;
     return true;
 }
 

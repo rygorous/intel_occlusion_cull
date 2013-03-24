@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -16,8 +16,18 @@
 //--------------------------------------------------------------------------------------
 
 #include "immintrin.h"
+#include <intrin.h>
 #ifndef HELPERSSE_H
 #define HELPERSSE_H
+
+// Find index of least-significant set bit in mask and clear it (mask must be nonzero)
+static int FindClearLSB(unsigned int *mask)
+{
+	unsigned long idx;
+	_BitScanForward(&idx, *mask);
+	*mask &= *mask - 1;
+	return idx;
+}
 
 class HelperSSE
 {
@@ -42,8 +52,8 @@ class HelperSSE
 			__m128i W;
 		};
 
-		__m128 TransformCoords(__m128 *v, __m128 *m);
-		void MatrixMultiply(__m128 *m1, __m128 *m2, __m128 *result);
+		__m128 TransformCoords(const __m128 *v, __m128 *m);
+		void MatrixMultiply(const __m128 *m1, const __m128 *m2, __m128 *result);
 
 		__forceinline __m128i Min(const __m128i &v0, const __m128i &v1)
 		{
@@ -59,5 +69,17 @@ class HelperSSE
 			return tmp;
 		}
 };
+
+class CPUTCamera;
+struct float4x4; 
+
+struct BoxTestSetupSSE : public HelperSSE
+{
+	__m128 mViewProjViewport[4];
+	CPUTCamera *mpCamera;
+	float radiusThreshold;
+
+	void Init(const __m128 viewMatrix[4], const __m128 projMatrix[4], const float4x4 &viewportMatix, CPUTCamera *pCamera, float sizeThreshold);
+}; 
 
 #endif 

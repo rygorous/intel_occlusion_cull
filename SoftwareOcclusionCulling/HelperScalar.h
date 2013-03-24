@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -42,5 +42,18 @@ class HelperScalar
 
 		float4 TransformCoords(const float4& v, const float4x4& m);
 };
+
+
+class CPUTCamera;
+struct float4x4; 
+
+struct BoxTestSetupScalar : public HelperScalar
+{
+	float4x4 mViewProjViewport;
+	CPUTCamera *mpCamera;
+	float radiusThreshold;
+
+	void Init(const float4x4 &viewMatrix, const float4x4 &projMatrix, const float4x4 &viewportMatix, CPUTCamera *pCamera, float sizeThreshold);
+}; 
 
 #endif

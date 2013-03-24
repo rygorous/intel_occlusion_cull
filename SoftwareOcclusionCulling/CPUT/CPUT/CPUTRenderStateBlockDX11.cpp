@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -17,14 +17,12 @@
 #include "CPUTRenderStateBlockDX11.h"
 #include "CPUTRenderStateMapsDX11.h"
 
-int gWireFrame = 0;
-
 //-----------------------------------------------------------------------------
 void CPUTRenderStateBlockDX11::ReadValue( CPUTConfigEntry *pValue, const CPUTRenderStateMapEntry *pRenderStateList, void *pDest )
 {
     cString lowerCaseName = pValue->NameAsString();
 
-    bool found;
+    bool found = false;
     // Find it in the map.  TODO: could use a real map.  Maybe with a binary search, lexical storage, etc.
     for( CPUTRenderStateMapEntry const *pCur = pRenderStateList; pCur->name.compare(_L("")); pCur++ )
     {

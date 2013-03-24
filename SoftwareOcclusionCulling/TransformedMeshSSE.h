@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -30,7 +30,8 @@ class TransformedMeshSSE : public HelperSSE
 		void Initialize(CPUTMeshDX11* pMesh);
 		void TransformVertices(__m128 *cumulativeMatrix, 
 							   UINT start, 
-							   UINT end);
+							   UINT end,
+							   UINT idx);
 
 		void BinTransformedTrianglesST(UINT taskId,
 									   UINT modelId,
@@ -40,7 +41,8 @@ class TransformedMeshSSE : public HelperSSE
 									   UINT* pBin,
 									   USHORT* pBinModel,
 									   USHORT* pBinMesh,
-									   USHORT* pNumTrisInBin);
+									   USHORT* pNumTrisInBin,
+									   UINT idx);
 
 		void BinTransformedTrianglesMT(UINT taskId,
 									   UINT modelId,
@@ -50,25 +52,28 @@ class TransformedMeshSSE : public HelperSSE
 									   UINT* pBin,
 									   USHORT* pBinModel,
 									   USHORT* pBinMesh,
-									   USHORT* pNumTrisInBin);
+									   USHORT* pNumTrisInBin,
+									   UINT idx);
 
-		void GetOneTriangleData(float* xformedPos, UINT triId, UINT lane);
+		void GetOneTriangleData(__m128 xformedPos[3], UINT triId, UINT idx);
 
 		inline UINT GetNumTriangles() {return mNumTriangles;}
 		inline UINT GetNumVertices() {return mNumVertices;}
-		inline void SetXformedPos(__m128 *pXformedPos){mpXformedPos = pXformedPos;}
-		inline void SetVertexStart(UINT vertexStart){mVertexStart = vertexStart;}
-
+		inline void SetXformedPos(__m128 *pXformedPos0, __m128 *pXformedPos1)
+		{
+			mpXformedPos[0] = pXformedPos0;
+			mpXformedPos[1] = pXformedPos1;
+		}
+	
 	private:
 		UINT mNumVertices;
 		UINT mNumIndices;
 		UINT mNumTriangles;
 		Vertex *mpVertices;
 		UINT *mpIndices;
-		__m128 *mpXformedPos; 
-		UINT mVertexStart;
-
-		void Gather(vFloat4 pOut[3], UINT triId, UINT numLanes);
+		__m128 *mpXformedPos[2]; 
+		
+		void Gather(vFloat4 pOut[3], UINT triId, UINT numLanes, UINT idx);
 };
 
 

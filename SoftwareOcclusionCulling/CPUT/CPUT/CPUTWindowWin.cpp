@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -145,7 +145,7 @@ ATOM CPUTWindowWin::MyRegisterClass(HINSTANCE hInstance)
 	wcex.cbSize = sizeof(WNDCLASSEX);
 
     // load icon from resource file
-    LPCTSTR iconPathName= L"CPUT.ico";
+    LPCTSTR iconPathName= L"..\\CPUT.ico";
     UINT icon_flags = LR_LOADFROMFILE | LR_DEFAULTSIZE;
     HANDLE hIcon = LoadImage(hInstance, iconPathName, IMAGE_ICON, 0, 0, icon_flags);
 

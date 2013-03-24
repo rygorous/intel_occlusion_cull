@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -16,6 +16,7 @@
 //--------------------------------------------------------------------------------------
 
 #include "HelperSSE.h"
+#include "CPUTCamera.h"
 
 HelperSSE::HelperSSE()
 {
@@ -25,7 +26,7 @@ HelperSSE::~HelperSSE()
 {
 }
 
-__m128 HelperSSE::TransformCoords(__m128 *v, __m128 *m)
+__m128 HelperSSE::TransformCoords(const __m128 *v, __m128 *m)
 {
 	__m128 vResult = _mm_shuffle_ps(*v, *v, _MM_SHUFFLE(0,0,0,0));
     vResult = _mm_mul_ps(vResult, m[0]);
@@ -44,7 +45,7 @@ __m128 HelperSSE::TransformCoords(__m128 *v, __m128 *m)
 }
 
 
-void HelperSSE::MatrixMultiply(__m128 *m1, __m128 *m2, __m128 *result)
+void HelperSSE::MatrixMultiply(const __m128 *m1, const __m128 *m2, __m128 *result)
 {
 	__m128 X, Y, Z, W;
 	float *mat = (float*)m1;
@@ -91,3 +92,21 @@ void HelperSSE::MatrixMultiply(__m128 *m1, __m128 *m2, __m128 *result)
 	result[3] = _mm_add_ps(result[3], _mm_mul_ps(W, m2[3]));
 	
 }
+
+void BoxTestSetupSSE::Init(const __m128 viewMatrix[4], const __m128 projMatrix[4], const float4x4 &viewportMatrix, CPUTCamera *pCamera, float occludeeSizeThreshold)
+{
+	__m128 viewPortMatrix[4];
+	viewPortMatrix[0] = _mm_loadu_ps((float*)&viewportMatrix.r0);
+	viewPortMatrix[1] = _mm_loadu_ps((float*)&viewportMatrix.r1);
+	viewPortMatrix[2] = _mm_loadu_ps((float*)&viewportMatrix.r2);
+	viewPortMatrix[3] = _mm_loadu_ps((float*)&viewportMatrix.r3);
+
+	MatrixMultiply(viewMatrix, projMatrix, mViewProjViewport);
+	MatrixMultiply(mViewProjViewport, viewPortMatrix, mViewProjViewport);
+
+	mpCamera = pCamera;
+
+	float fov = pCamera->GetFov();
+	float tanOfHalfFov = tanf(fov * 0.5f);
+	radiusThreshold = occludeeSizeThreshold * occludeeSizeThreshold * tanOfHalfFov;
+} 

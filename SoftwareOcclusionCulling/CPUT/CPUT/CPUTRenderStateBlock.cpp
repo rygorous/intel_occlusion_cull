@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -17,10 +17,8 @@
 
 #ifdef CPUT_FOR_DX11
 #include "CPUTRenderStateBlockDX11.h"
-#elif defined(CPUT_FOR_OGLES)
-#include "CPUTRenderStateBlockOGLES.h"
 #else
-#error You must supply a target graphics API (ex: #define CPUT_FOR_DX11), or implement the target API for this file.
+    #error You must supply a target graphics API (ex: #define CPUT_FOR_DX11), or implement the target API for this file.
 #endif
 
 
@@ -31,10 +29,8 @@ CPUTRenderStateBlock *CPUTRenderStateBlock::CreateRenderStateBlock( const cStrin
     // TODO: Make this DX/OGL-API independent.  How to choose which one gets created?  Remember, we eventually want to support both in one app (to compare them with a keyboard toggle)
 #ifdef CPUT_FOR_DX11
     CPUTRenderStateBlock *pRenderStateBlock = new CPUTRenderStateBlockDX11();
-#elif defined(CPUT_FOR_OGLES)
-    CPUTRenderStateBlock *pRenderStateBlock = new CPUTRenderStateBlockOGLES();
 #else
-#error You must supply a target graphics API (ex: #define CPUT_FOR_DX11), or implement the target API for this file.
+    #error You must supply a target graphics API (ex: #define CPUT_FOR_DX11), or implement the target API for this file.
 #endif
     pRenderStateBlock->LoadRenderStateBlock( absolutePathAndFilename );
 

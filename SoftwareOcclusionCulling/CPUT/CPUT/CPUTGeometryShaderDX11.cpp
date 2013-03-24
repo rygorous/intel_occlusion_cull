@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// Copyright 2011 Intel Corporation
+// Copyright 2013 Intel Corporation
 // All Rights Reserved
 //
 // Permission is granted to use, copy, distribute and prepare derivative works of this
@@ -35,7 +35,7 @@ CPUTGeometryShaderDX11 *CPUTGeometryShaderDX11::CreateGeometryShader(
     // Create the Geometry shader
     // TODO: Move to Geometry shader class
     HRESULT hr = pD3dDevice->CreateGeometryShader( pCompiledBlob->GetBufferPointer(), pCompiledBlob->GetBufferSize(), NULL, &pNewGeometryShader );
-    ASSERT( SUCCEEDED(result), _L("Error compiling Geometry shader:\n\n") );
+    ASSERT( SUCCEEDED(hr), _L("Error creating Geometry shader:\n\n") );
     // cString DebugName = _L("CPUTAssetLibraryDX11::GetGeometryShader ")+name;
     // CPUTSetDebugName(pNewGeometryShader, DebugName);
 
@@ -63,12 +63,12 @@ CPUTGeometryShaderDX11 *CPUTGeometryShaderDX11::CreateGeometryShaderFromMemory(
 
     CPUTAssetLibraryDX11 *pAssetLibrary = (CPUTAssetLibraryDX11*)CPUTAssetLibrary::GetAssetLibrary();
     CPUTResult result = pAssetLibrary->CompileShaderFromMemory(pShaderSource, shaderMain, shaderProfile, &pCompiledBlob);
-    ASSERT( CPUTSUCCESS(result), _L("Error compiling Geometry shader:\n\n") );
+    ASSERT( CPUTSUCCESS(result), _L("Error creating Geometry shader:\n\n") );
 
     // Create the Geometry shader
     // TODO: Move to Geometry shader class
     HRESULT hr = pD3dDevice->CreateGeometryShader( pCompiledBlob->GetBufferPointer(), pCompiledBlob->GetBufferSize(), NULL, &pNewGeometryShader );
-    ASSERT( SUCCEEDED(result), _L("Error compiling Geometry shader:\n\n") );
+    ASSERT( SUCCEEDED(hr), _L("Error creating Geometry shader:\n\n") );
     // cString DebugName = _L("CPUTAssetLibraryDX11::GetGeometryShader ")+name;
     // CPUTSetDebugName(pNewGeometryShader, DebugName);
 
