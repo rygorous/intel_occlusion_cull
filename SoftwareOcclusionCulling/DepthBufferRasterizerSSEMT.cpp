@@ -349,7 +349,7 @@ struct BlockSetup
 			e[i].offs = _mm_add_epi32(e[i].offs, nmax);
 			e[i].quadX = _mm_slli_epi32(stepX, 1);
 			e[i].quadY = _mm_slli_epi32(stepY, 1);
-			e[i].line = _mm_sub_epi32(e[i].quadY, _mm_slli_epi32(stepX, BlockLog2));
+			e[i].line = _mm_sub_epi32(e[i].quadY, _mm_mullo_epi32(stepX, _mm_set1_epi32(BlockSize - 2)));
 		}
 
 		for(int i=0; i < 5; i++)
@@ -376,7 +376,8 @@ static __forceinline void PartialBlock(float * __restrict pDepth, __m128i e, con
 	{
 		__m128 depth = depthRow;
 
-		for (int index=0; index < BlockSize*2; index += 2*2)
+		// Inner part of this row (all but last quad)
+		for (int index=0; index < (BlockSize-2)*2; index += 2*2)
 		{
 			// Test pixel inside triangle
 			__m128i mask = _mm_or_si128(_mm_or_si128(alph, beta), gama);
@@ -394,6 +395,19 @@ static __forceinline void PartialBlock(float * __restrict pDepth, __m128i e, con
 			depth = _mm_add_ps(depth, setup.z[3]);
 		}
 
+		// Last quad this row
+		static const int lastIndex = (BlockSize - 2) * 2;
+
+		// Test pixel inside triangle
+		__m128i mask = _mm_or_si128(_mm_or_si128(alph, beta), gama);
+
+		// Compute barycentric-interpolated depth
+		__m128 previousDepthValue = _mm_load_ps(&pDepth[lastIndex]);
+		__m128 mergedDepth = _mm_max_ps(depth, previousDepthValue);
+		__m128 finaldepth = _mm_blendv_ps(mergedDepth, previousDepthValue, _mm_castsi128_ps(mask));
+		_mm_store_ps(&pDepth[lastIndex], finaldepth);
+
+		// Increment to next row
 		alph = _mm_add_epi32(alph, setup.e[0].line);
 		beta = _mm_add_epi32(beta, setup.e[1].line);
 		gama = _mm_add_epi32(gama, setup.e[2].line);
